@@ -56,6 +56,20 @@ export const evolutionAPI = {
     }
   },
 
+  // Enviar mídia (imagem, vídeo, documento) para contato privado
+  async sendMedia(instanceName: string, number: string, mediaUrl: string, caption?: string): Promise<EvolutionAPIResponse> {
+    try {
+      const response = await api.post(`/message/sendMedia/${instanceName}`, {
+        number: number,
+        mediaUrl: mediaUrl,
+        caption: caption || '',
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+
   // Listar grupos do WhatsApp
   async fetchGroups(instanceName: string): Promise<EvolutionAPIResponse> {
     try {

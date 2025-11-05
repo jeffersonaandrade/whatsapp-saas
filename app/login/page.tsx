@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { MessageSquare, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -82,18 +83,17 @@ export default function LoginPage() {
                   Senha
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
                     <Lock className="h-5 w-5 text-gray-400" />
                   </div>
-                  <input
+                  <PasswordInput
                     id="password"
                     name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    autoComplete="current-password"
+                    required
+                    className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                     placeholder="••••••••"
                   />
                 </div>

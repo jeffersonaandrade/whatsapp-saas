@@ -12,7 +12,8 @@ import {
   Settings,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Package
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +25,7 @@ interface MainLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Conversas', href: '/conversations', icon: MessageSquare },
+  { name: 'Produtos', href: '/products', icon: Package },
   { name: 'Campanhas', href: '/campaigns', icon: Megaphone },
   { name: 'Grupos', href: '/groups', icon: Users },
   { name: 'Equipe', href: '/team', icon: UserCog },
