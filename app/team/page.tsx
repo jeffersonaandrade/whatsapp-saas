@@ -31,6 +31,7 @@ export default function TeamPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
   
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -332,7 +333,9 @@ export default function TeamPage() {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors">
+                        <button
+                          onClick={() => setMemberToDelete(member)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -498,6 +501,30 @@ export default function TeamPage() {
           </div>
         )}
       </div>
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-900 bg-opacity-75" onClick={() => setMemberToDelete(null)} />
+            <div className="relative inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Excluir usuário</h3>
+              <p className="text-sm text-gray-600">Tem certeza que deseja excluir o usuário <span className="font-medium">{memberToDelete.name}</span>? Essa ação não pode ser desfeita.</p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setMemberToDelete(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
+                <button
+                  onClick={() => {
+                    // TODO: integrar com serviço backend quando disponível
+                    console.log('Excluir usuário:', memberToDelete.id);
+                    setMemberToDelete(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

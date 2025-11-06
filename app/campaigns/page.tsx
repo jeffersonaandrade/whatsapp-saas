@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { 
   Plus,
@@ -43,6 +43,8 @@ export default function CampaignsPage() {
   const [campaignMessage, setCampaignMessage] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   // Mock data - será substituído por dados reais
   const [groups, setGroups] = useState<Group[]>([
@@ -327,15 +329,43 @@ export default function CampaignsPage() {
                       Mídia (Opcional)
                     </label>
                     <div className="flex items-center space-x-2">
-                      <button className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                      <button
+                        className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                        onClick={() => imageInputRef.current?.click()}
+                        type="button"
+                      >
                         <ImageIcon className="w-4 h-4 mr-2" />
                         Imagem
                       </button>
-                      <button className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                      <button className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" onClick={() => videoInputRef.current?.click()} type="button">
                         <Video className="w-4 h-4 mr-2" />
                         Vídeo
                       </button>
                     </div>
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/mp4,video/mpeg,video/quicktime"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (file) {
+                          setSelectedMedia(file);
+                        }
+                      }}
+                    />
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (file) {
+                          setSelectedMedia(file);
+                        }
+                      }}
+                    />
                   </div>
 
                   {/* Selecionar Grupos */}

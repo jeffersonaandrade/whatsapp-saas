@@ -88,6 +88,18 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (
+        !businessConfig.companyName.trim() ||
+        !businessConfig.businessType.trim() ||
+        !businessConfig.businessDescription.trim() ||
+        !businessConfig.openingHours.trim() ||
+        !businessConfig.phone.trim() ||
+        !businessConfig.address.trim()
+      ) {
+        alert('Preencha todos os campos obrigatórios do negócio.');
+        setSaving(false);
+        return;
+      }
       // TODO: Substituir por chamada ao Supabase quando conectar:
       // const { data: user } = useAuth();
       // await businessConfigService.updateBusinessConfig(user.accountId, {
@@ -170,6 +182,7 @@ export default function SettingsPage() {
                   </label>
                   <input
                     type="text"
+                    required
                     value={businessConfig.companyName}
                     onChange={(e) => setBusinessConfig({ ...businessConfig, companyName: e.target.value })}
                     placeholder="Ex: Pizzaria do João"
@@ -183,6 +196,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     value={businessConfig.businessType}
+                    required
                     onChange={(e) => setBusinessConfig({ ...businessConfig, businessType: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   >
@@ -201,10 +215,11 @@ export default function SettingsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descrição do Negócio
+                  Descrição do Negócio *
                 </label>
                 <textarea
                   value={businessConfig.businessDescription}
+                  required
                   onChange={(e) => setBusinessConfig({ ...businessConfig, businessDescription: e.target.value })}
                   rows={2}
                   placeholder="Ex: Pizzaria artesanal com ingredientes frescos"
@@ -216,10 +231,11 @@ export default function SettingsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Clock className="w-4 h-4 inline mr-2" />
-                    Horário de Funcionamento
+                    Horário de Funcionamento *
                   </label>
                   <input
                     type="text"
+                    required
                     value={businessConfig.openingHours}
                     onChange={(e) => setBusinessConfig({ ...businessConfig, openingHours: e.target.value })}
                     placeholder="Ex: 18h às 23h (seg-sáb)"
@@ -229,10 +245,11 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Telefone de Contato
+                    Telefone de Contato *
                   </label>
                   <input
                     type="text"
+                    required
                     value={businessConfig.phone}
                     onChange={(e) => setBusinessConfig({ ...businessConfig, phone: e.target.value })}
                     placeholder="Ex: (11) 98765-4321"
@@ -244,10 +261,11 @@ export default function SettingsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <MapPin className="w-4 h-4 inline mr-2" />
-                  Endereço
+                  Endereço *
                 </label>
                 <input
                   type="text"
+                  required
                   value={businessConfig.address}
                   onChange={(e) => setBusinessConfig({ ...businessConfig, address: e.target.value })}
                   placeholder="Ex: Rua das Pizzas, 123 - Centro"
@@ -281,11 +299,23 @@ export default function SettingsPage() {
                         Taxa de Entrega (R$)
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={businessConfig.deliveryFee}
-                        onChange={(e) => setBusinessConfig({ ...businessConfig, deliveryFee: parseFloat(e.target.value) || 0 })}
+                        type="text"
+                        inputMode="decimal"
+                        pattern="^\\d{1,4}(,\\d{1,2}|\\.\\d{1,2})?$"
+                        value={String(businessConfig.deliveryFee ?? '')}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, '.');
+                          if (raw === '') {
+                            setBusinessConfig({ ...businessConfig, deliveryFee: 0 });
+                            return;
+                          }
+                          const valid = /^\d{0,4}(\.\d{0,2})?$/.test(raw);
+                          if (!valid) return;
+                          const num = parseFloat(raw);
+                          if (isNaN(num)) return;
+                          if (num > 9999.99) return;
+                          setBusinessConfig({ ...businessConfig, deliveryFee: num });
+                        }}
                         placeholder="0.00"
                         className="w-full md:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       />
