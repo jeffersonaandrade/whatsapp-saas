@@ -12,6 +12,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -53,19 +54,24 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (productId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este produto?')) {
-      return;
-    }
+  const openDeleteModal = (product: Product) => {
+    setProductToDelete(product);
+  };
 
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
     try {
-      await productsService.deleteProduct(productId);
+      await productsService.deleteProduct(productToDelete.id);
       await loadProducts();
     } catch (error) {
       console.error('Erro ao excluir produto:', error);
       alert('Erro ao excluir produto. Tente novamente.');
+    } finally {
+      setProductToDelete(null);
     }
   };
+
+  const cancelDelete = () => setProductToDelete(null);
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
@@ -173,7 +179,7 @@ export default function ProductsPage() {
                     <Edit className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(product.id)}
+                    onClick={() => openDeleteModal(product)}
                     className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -205,6 +211,20 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Excluir produto</h3>
+              <p className="text-sm text-gray-600">Tem certeza que deseja excluir o produto <span className="font-medium">{productToDelete.name}</span>? Essa ação não pode ser desfeita.</p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={cancelDelete} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
+                <button onClick={confirmDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg">Excluir</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }
@@ -229,11 +249,13 @@ function ProductForm({
   });
   const [imagePreview, setImagePreview] = useState<string | null>(product?.imageUrl || null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || formData.price <= 0) {
-      alert('Preencha nome e preço do produto.');
+    setSubmitted(true);
+    if (!formData.name || formData.price <= 0 || !formData.category) {
+      alert('Preencha nome, preço e categoria do produto.');
       return;
     }
     onSave(formData);
@@ -318,15 +340,19 @@ function ProductForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoria
+                Categoria *
               </label>
               <input
                 type="text"
+                required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="Ex: Eletrônicos, Roupas, etc."
               />
+              {submitted && !formData.category && (
+                <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+              )}
             </div>
 
             <div>
@@ -334,7 +360,7 @@ function ProductForm({
                 Imagem do Produto
               </label>
               <p className="text-xs text-gray-500 mb-2">
-                Faça upload da imagem do produto. Formatos aceitos: JPG, PNG, WEBP (máx. 5MB). 
+                Faça upload da imagem do produto. Formatos aceitos: JPG, JPEG, PNG (máx. 5MB). 
                 A IA pode enviar esta imagem ao cliente quando mencionar o produto.
               </p>
               
@@ -343,7 +369,7 @@ function ProductForm({
                   <label className="flex-1 cursor-pointer">
                     <input
                       type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      accept="image/jpeg,image/jpg,image/png"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
@@ -388,7 +414,7 @@ function ProductForm({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
                           <span className="text-sm text-gray-600">Clique para fazer upload</span>
-                          <span className="text-xs text-gray-500">JPG, PNG, WEBP (máx. 5MB)</span>
+                          <span className="text-xs text-gray-500">JPG, JPEG, PNG (máx. 5MB)</span>
                         </div>
                       )}
                     </div>
