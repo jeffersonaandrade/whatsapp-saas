@@ -117,7 +117,13 @@ Regras:
     const tokensUsed = data.usage?.total_tokens || 0;
     recordGroqUsage(config.apiKey, tokensUsed);
 
-    const analysis = JSON.parse(content) as IntentionAnalysis;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      throw new Error('Resposta da Groq não está em JSON válido');
+    }
+
+    const analysis = JSON.parse(jsonMatch[0]) as IntentionAnalysis;
 
     return analysis;
   } catch (error) {
@@ -205,7 +211,7 @@ ${context?.botPersonality
 }
 - Responda em português brasileiro
 - Se não souber algo, seja honesto
-- Mantenha respostas curtas (máximo 2 parágrafos)
+- Cada resposta deve ter no máximo 3 frases curtas (≈120 palavras)
 - Se o cliente perguntar sobre produtos ou preços, use as informações de produtos acima
 - Se o cliente perguntar sobre horário, endereço ou entrega, use as informações acima
 - Se o cliente quiser comprar, informe que um atendente humano irá ajudar
@@ -221,7 +227,7 @@ ${context?.botPersonality
           },
         ],
         temperature: 0.7,
-        max_tokens: 200, // Limitar para evitar ultrapassar rate limiting (200 tokens ≈ 150 caracteres)
+        max_tokens: 150, // Limitar geração para economizar tokens (aprox. 100-120 palavras)
       }),
     });
 
@@ -240,19 +246,7 @@ ${context?.botPersonality
     const tokensUsed = data.usage?.total_tokens || 0;
     recordGroqUsage(config.apiKey, tokensUsed);
 
-    // Limitar resposta em caracteres como segurança adicional (150 caracteres ≈ 200 tokens)
-    // Isso garante que não ultrapassaremos o rate limiting mesmo se a IA gerar mais tokens
-    const maxResponseLength = 150; // Limite de caracteres (≈ 200 tokens com margem de segurança)
-    const trimmedContent = content.trim();
-    
-    if (trimmedContent.length > maxResponseLength) {
-      // Truncar resposta se exceder limite
-      const truncated = trimmedContent.substring(0, maxResponseLength).trim();
-      console.warn(`Resposta da IA truncada: ${trimmedContent.length} → ${truncated.length} caracteres`);
-      return truncated + '...';
-    }
-
-    return trimmedContent;
+    return content.trim();
   } catch (error) {
     console.error('Erro ao gerar resposta com Groq:', error);
     

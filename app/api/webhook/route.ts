@@ -64,11 +64,11 @@ async function handleNewMessage(data: any) {
       }
 
       const contactPhone = message.key.remoteJid?.replace('@s.whatsapp.net', '') || '';
-      const messageText = message.message?.conversation || 
-                         message.message?.extendedTextMessage?.text || 
+      const rawMessageText = message.message?.conversation ||
+                         message.message?.extendedTextMessage?.text ||
                          '';
-      
-      if (!contactPhone || !messageText) {
+
+      if (!contactPhone) {
         continue;
       }
 
@@ -79,14 +79,35 @@ async function handleNewMessage(data: any) {
         message.pushName || undefined
       );
 
+      const sanitizedIncomingMessage = rawMessageText.trim();
+      const incomingBody = sanitizedIncomingMessage || '[mensagem não textual]';
+
       // Salvar mensagem recebida
       await mockDataService.addMessage({
         conversationId: conversation.id,
         fromMe: false,
-        body: messageText,
+        body: incomingBody,
         status: 'read',
         sentBy: 'customer',
       });
+
+      if (!sanitizedIncomingMessage) {
+        const textOnlyNotice = 'No momento só consigo responder mensagens de texto. Envie sua pergunta por escrito.';
+
+        await mockDataService.addMessage({
+          conversationId: conversation.id,
+          fromMe: true,
+          body: textOnlyNotice,
+          status: 'sent',
+          sentBy: 'bot',
+        });
+
+        await sendMessage(instanceName, contactPhone, textOnlyNotice);
+        recordMessageSent(instanceName);
+        continue;
+      }
+
+      const messageText = sanitizedIncomingMessage;
 
       // Verificar se a conversa está sendo atendida por um humano
       // Se sim, NÃO chamar IA (economiza rate limits)
@@ -299,6 +320,8 @@ async function handleNewMessage(data: any) {
         status: 'sent',
         sentBy: 'bot',
       });
+
+      console.log('Resposta gerada para cliente:', botResponse);
 
       await sendMessage(instanceName, contactPhone, botResponse);
       recordMessageSent(instanceName);
