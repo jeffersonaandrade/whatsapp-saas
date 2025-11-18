@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
@@ -21,95 +21,247 @@ export default function DashboardPage() {
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Mock data - será substituído por dados reais do Supabase
-  const stats = [
-    { name: 'Conversas Hoje', value: '12', icon: MessageCircle, change: '+4.75%', changeType: 'positive' },
-    { name: 'Mensagens na Fila', value: '3', icon: Users, change: '-2.02%', changeType: 'negative' },
-    { name: 'Taxa de Resposta', value: '98.5%', icon: TrendingUp, change: '+1.39%', changeType: 'positive' },
-    { name: 'Tempo Médio', value: '2.4min', icon: Smartphone, change: '-0.95%', changeType: 'positive' },
-  ];
+  const [stats, setStats] = useState([
+    { name: 'Conversas Hoje', value: '0', icon: MessageCircle, change: '0%', changeType: 'positive' },
+    { name: 'Mensagens na Fila', value: '0', icon: Users, change: '0%', changeType: 'negative' },
+    { name: 'Taxa de Resposta', value: '0%', icon: TrendingUp, change: '0%', changeType: 'positive' },
+    { name: 'Tempo Médio', value: '0min', icon: Smartphone, change: '0%', changeType: 'positive' },
+  ]);
+  const [recentActivities, setRecentActivities] = useState<Array<{
+    id: string;
+    contactName: string;
+    lastMessage: string;
+    timeAgo: string;
+  }>>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Buscar dados do dashboard
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setStatsLoading(true);
+        
+        // Buscar estatísticas (rota local na porta 3000)
+        const statsResponse = await fetch('/api/dashboard/stats', {
+          credentials: 'include',
+        });
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          if (statsData.success && statsData.stats) {
+            setStats([
+              { name: 'Conversas Hoje', value: String(statsData.stats.conversationsToday), icon: MessageCircle, change: '+0%', changeType: 'positive' },
+              { name: 'Mensagens na Fila', value: String(statsData.stats.messagesInQueue), icon: Users, change: '0%', changeType: 'negative' },
+              { name: 'Taxa de Resposta', value: statsData.stats.responseRate, icon: TrendingUp, change: '+0%', changeType: 'positive' },
+              { name: 'Tempo Médio', value: statsData.stats.averageTime, icon: Smartphone, change: '0%', changeType: 'positive' },
+            ]);
+          }
+        }
+
+        // Buscar atividade recente (rota local na porta 3000)
+        const activityResponse = await fetch('/api/dashboard/recent-activity', {
+          credentials: 'include',
+        });
+        if (activityResponse.ok) {
+          const activityData = await activityResponse.json();
+          if (activityData.success && activityData.activities) {
+            setRecentActivities(activityData.activities);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados do dashboard:', error);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
+
+  const checkConnectionStatus = useCallback(async () => {
+    // Não fazer nada se não estiver em estado 'connecting'
+    if (connectionStatus !== 'connecting') {
+      return;
+    }
+
+    try {
+      // Polling passivo: apenas verificar status (GET)
+      // NÃO chamar connectInstance() aqui - isso reiniciaria o processo
+      const { getInstanceStatus } = await import('@/lib/services/motor-service');
+      
+      const result = await getInstanceStatus();
+      
+      if (!result.success) {
+        // Se der erro (ex: 401, 500), parar o loop
+        console.error('Erro ao verificar status:', result.error);
+        setConnectionStatus('disconnected');
+        setShowQRCode(false);
+        setQrCodeImage(null);
+        // Limpar intervalo
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        return;
+      }
+      
+      const data = result.data;
+
+      // Se o status retornar QR Code, atualizar estado imediatamente
+      // O backend pode ter recebido o webhook qrcode.update e agora retorna no status
+      if (data.qrcode && !qrCodeImage) {
+        setQrCodeImage(data.qrcode);
+        console.log('[Polling] QR Code obtido via status');
+      }
+
+      // Se conectado, atualizar estado e parar polling
+      if (data.isConnected || data.status === 'connected') {
+        setConnectionStatus('connected');
+        setShowQRCode(false);
+        setQrCodeImage(null);
+        setPhoneNumber(data.phoneNumber || null);
+        // Limpar intervalo
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        return;
+      }
+
+      // Se ainda está desconectado/connecting, continuar aguardando
+      // O polling continuará até conectar ou dar erro
+      if (data.status === 'disconnected' || data.status === 'connecting') {
+        // Manter em 'connecting' - o polling continuará
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status:', error);
+      // Em caso de erro, parar o loop
+      setConnectionStatus('disconnected');
+      setShowQRCode(false);
+      setQrCodeImage(null);
+      // Limpar intervalo
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+  }, [connectionStatus, qrCodeImage]);
 
   // Verificar status da conexão periodicamente
   useEffect(() => {
-    if (connectionStatus === 'connecting') {
-      const interval = setInterval(async () => {
-        await checkConnectionStatus();
-      }, 3000); // Verificar a cada 3 segundos
-
-      return () => clearInterval(interval);
+    // Limpar intervalo anterior se existir
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
-  }, [connectionStatus]);
+
+    // Só fazer polling se estiver em estado 'connecting' e não estiver carregando
+    if (connectionStatus === 'connecting' && !loading) {
+      pollingIntervalRef.current = setInterval(() => {
+        checkConnectionStatus();
+      }, 3000); // Verificar a cada 3 segundos
+    }
+
+    // Cleanup: limpar intervalo quando componente desmontar ou status mudar
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [connectionStatus, loading, checkConnectionStatus]);
 
   const handleConnect = async () => {
+    // Não permitir múltiplas chamadas simultâneas
+    if (loading || connectionStatus === 'connecting') {
+      return;
+    }
+
     setLoading(true);
     setConnectionStatus('connecting');
     setShowQRCode(true);
 
     try {
-      const instanceName = `instance-${user?.accountId || 'default'}`;
+      // Chamar Motor (Backend na porta 3001) para conectar instância
+      // O Motor então chama o Evolution API (porta 8080)
+      // IMPORTANTE: Chamar apenas UMA vez. Se não retornar QR Code, aguardar webhook
+      const { connectInstance } = await import('@/lib/services/motor-service');
       
-      const response = await fetch('/api/instance/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ instanceName }),
+      const result = await connectInstance({
+        // Não enviar instanceName - deixar o Motor gerar automaticamente
+        // O Motor extrai accountId dos cookies
       });
-
-      const data = await response.json();
-
-      if (data.success && data.qrCode) {
-        setQrCodeImage(data.qrCode);
-      } else {
-        console.error('Erro ao obter QR Code:', data.error);
-        alert('Erro ao conectar. Tente novamente.');
-        setConnectionStatus('disconnected');
-        setShowQRCode(false);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao conectar instância');
       }
-    } catch (error) {
+      
+      const data = result.data;
+
+      if (data.success) {
+        if (data.qrCode) {
+          // QR Code retornado na primeira chamada - exibir imediatamente
+          setQrCodeImage(data.qrCode);
+          setConnectionStatus('connecting');
+        } else if (data.status === 'connected') {
+          // Já está conectado
+          setConnectionStatus('connected');
+          setShowQRCode(false);
+          setQrCodeImage(null);
+          setPhoneNumber(data.phoneNumber || null);
+        } else if (data.message && data.message.includes('webhook')) {
+          // Backend informou que QR Code virá via webhook
+          // Manter em 'connecting' e aguardar webhook ou polling de status
+          setConnectionStatus('connecting');
+          setQrCodeImage(null); // QR Code ainda não disponível
+          // O polling de status continuará verificando
+        } else {
+          // Status 'connecting' mas sem QR Code ainda
+          setConnectionStatus('connecting');
+          // O polling de status continuará verificando
+        }
+      } else {
+        throw new Error(data.error || 'Erro ao conectar');
+      }
+    } catch (error: any) {
       console.error('Erro ao conectar:', error);
-      alert('Erro ao conectar. Tente novamente.');
+      alert(error.message || 'Erro ao conectar. Tente novamente.');
       setConnectionStatus('disconnected');
       setShowQRCode(false);
+      setQrCodeImage(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const checkConnectionStatus = async () => {
-    try {
-      const instanceName = `instance-${user?.accountId || 'default'}`;
-      
-      const response = await fetch(`/api/instance/status?instanceName=${instanceName}`);
-      const data = await response.json();
-
-      if (data.isConnected) {
-        setConnectionStatus('connected');
-        setShowQRCode(false);
-        setQrCodeImage(null);
-        setPhoneNumber(data.phoneNumber || '+55 11 99999-9999');
-      }
-    } catch (error) {
-      console.error('Erro ao verificar status:', error);
-    }
-  };
 
   const handleDisconnect = async () => {
     setLoading(true);
     
+    // Limpar intervalo de polling antes de desconectar
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
     try {
-      const instanceName = `instance-${user?.accountId || 'default'}`;
+      // Chamar Motor (Backend na porta 3001) para desconectar instância
+      const { disconnectInstance } = await import('@/lib/services/motor-service');
       
-      const response = await fetch('/api/instance/disconnect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ instanceName }),
+      const result = await disconnectInstance({
+        // Não enviar instanceName - deixar o Motor gerar automaticamente
+        // O Motor extrai accountId dos cookies
       });
-
-      const data = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao desconectar instância');
+      }
+      
+      const data = result.data;
 
       if (data.success) {
         setConnectionStatus('disconnected');
@@ -270,22 +422,28 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Atividade Recente</h2>
-            <div className="space-y-4">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-gray-200" />
+            {statsLoading ? (
+              <div className="text-center py-8 text-gray-500">Carregando...</div>
+            ) : recentActivities.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">Nenhuma atividade recente</div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivities.map((activity) => (
+                  <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gray-200" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{activity.contactName}</p>
+                      <p className="text-sm text-gray-600 truncate">{activity.lastMessage}</p>
+                    </div>
+                    <div className="flex-shrink-0 text-xs text-gray-500">
+                      {activity.timeAgo}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Cliente #{item}</p>
-                    <p className="text-sm text-gray-600 truncate">Última mensagem recebida...</p>
-                  </div>
-                  <div className="flex-shrink-0 text-xs text-gray-500">
-                    há {item * 5}min
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
