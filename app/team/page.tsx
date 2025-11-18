@@ -36,6 +36,9 @@ export default function TeamPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
+  const [addSubmitted, setAddSubmitted] = useState(false);
+  const [editSubmitted, setEditSubmitted] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive' | 'admins' | 'agents'>('all');
 
   // Mock data - será substituído por dados reais
   const teamMembers: TeamMember[] = [
@@ -85,8 +88,13 @@ export default function TeamPage() {
   };
 
   const handleAddMember = () => {
+    setAddSubmitted(true);
+    if (!name || !email) {
+      return;
+    }
     console.log('Adicionando membro:', { name, email, role });
     setShowAddModal(false);
+    setAddSubmitted(false);
     // Reset form
     setName('');
     setEmail('');
@@ -98,10 +106,15 @@ export default function TeamPage() {
     setName(member.name);
     setEmail(member.email);
     setRole(member.role);
+    setEditSubmitted(false);
     setShowEditModal(true);
   };
 
   const handleEditMember = () => {
+    setEditSubmitted(true);
+    if (!name || !email) {
+      return;
+    }
     console.log('Editando membro:', { id: selectedMember?.id, name, email, role });
     setShowEditModal(false);
     setSelectedMember(null);
@@ -179,9 +192,14 @@ export default function TeamPage() {
           </button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        {/* Stats Cards (clicáveis como filtros) */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            aria-pressed={activeFilter === 'all'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'all' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
@@ -191,9 +209,14 @@ export default function TeamPage() {
                 <Users className="w-6 h-6 text-blue-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('active')}
+            aria-pressed={activeFilter === 'active'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'active' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Usuários Ativos</p>
@@ -203,9 +226,14 @@ export default function TeamPage() {
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('admins')}
+            aria-pressed={activeFilter === 'admins'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'admins' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Administradores</p>
@@ -215,9 +243,14 @@ export default function TeamPage() {
                 <Shield className="w-6 h-6 text-purple-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('agents')}
+            aria-pressed={activeFilter === 'agents'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'agents' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Vendedores</p>
@@ -227,7 +260,24 @@ export default function TeamPage() {
                 <UserCheck className="w-6 h-6 text-orange-600" />
               </div>
             </div>
-          </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('inactive')}
+            aria-pressed={activeFilter === 'inactive'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'inactive' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Usuários Inativos</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{teamMembers.filter(m => m.status === 'inactive').length}</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-gray-50 flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-gray-600" />
+              </div>
+            </div>
+          </button>
         </div>
 
         {/* Permissions Info */}
@@ -298,7 +348,16 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {teamMembers.map((member) => (
+                {teamMembers
+                  .filter((member) => {
+                    if (activeFilter === 'all') return true;
+                    if (activeFilter === 'active') return member.status === 'active';
+                    if (activeFilter === 'inactive') return member.status === 'inactive';
+                    if (activeFilter === 'admins') return member.role === 'admin';
+                    if (activeFilter === 'agents') return member.role === 'agent';
+                    return true;
+                  })
+                  .map((member) => (
                   <tr key={member.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -366,29 +425,31 @@ export default function TeamPage() {
 
                 <div className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nome Completo *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ex: João Silva"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${addSubmitted && !name ? 'border-red-500' : 'border-gray-300'}`}
                     />
+                    {addSubmitted && !name && (
+                      <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      E-mail *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">E-mail *</label>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="joao@empresa.com"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${addSubmitted && !email ? 'border-red-500' : 'border-gray-300'}`}
                     />
+                    {addSubmitted && !email && (
+                      <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+                    )}
                   </div>
 
                   <div>
@@ -420,8 +481,7 @@ export default function TeamPage() {
                   </button>
                   <button
                     onClick={handleAddMember}
-                    disabled={!name || !email}
-                    className="px-6 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    className="px-6 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
                   >
                     Adicionar
                   </button>
@@ -450,23 +510,29 @@ export default function TeamPage() {
 
                 <div className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${editSubmitted && !name ? 'border-red-500' : 'border-gray-300'}`}
                     />
+                    {editSubmitted && !name && (
+                      <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">E-mail *</label>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${editSubmitted && !email ? 'border-red-500' : 'border-gray-300'}`}
                     />
+                    {editSubmitted && !email && (
+                      <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+                    )}
                   </div>
 
                   <div>

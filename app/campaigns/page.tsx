@@ -39,10 +39,13 @@ interface Campaign {
 
 export default function CampaignsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [campaignName, setCampaignName] = useState('');
   const [campaignMessage, setCampaignMessage] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
+   const [activeFilter, setActiveFilter] = useState<'all' | 'sent_today' | 'scheduled' | 'groups_reached'>('all');
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,7 +57,7 @@ export default function CampaignsPage() {
     { id: '4', name: 'Lançamentos', participantsCount: 67, isSelected: false },
   ]);
 
-  const campaigns: Campaign[] = [
+  const [campaigns, setCampaigns] = useState<Campaign[]>([
     {
       id: '1',
       name: 'Promoção Black Friday',
@@ -81,7 +84,7 @@ export default function CampaignsPage() {
       status: 'draft',
       createdAt: '2024-11-03',
     },
-  ];
+  ]);
 
   const stats = {
     totalCampaigns: 12,
@@ -98,16 +101,100 @@ export default function CampaignsPage() {
 
   const selectedGroupsCount = groups.filter(g => g.isSelected).length;
 
-  const handleCreateCampaign = () => {
-    // Aqui será implementada a lógica real de criação
-    console.log('Criando campanha:', {
-      name: campaignName,
-      message: campaignMessage,
-      groups: groups.filter(g => g.isSelected),
-      media: selectedMedia,
-      scheduledFor: scheduleDate,
-    });
-    setShowCreateModal(false);
+  const isDateToday = (dateString?: string) => {
+    if (!dateString) return false;
+    // Tenta parsear ISO
+    const parsed = new Date(dateString);
+    if (!isNaN(parsed.getTime())) {
+      const today = new Date();
+      return (
+        parsed.getDate() === today.getDate() &&
+        parsed.getMonth() === today.getMonth() &&
+        parsed.getFullYear() === today.getFullYear()
+      );
+    }
+    // Fallback para textos como "Hoje às 10:00"
+    return /hoje/i.test(dateString);
+  };
+
+  const filteredCampaigns = campaigns.filter(c => {
+    if (activeFilter === 'all') return true;
+     if (activeFilter === 'groups_reached') return true;
+    if (activeFilter === 'scheduled') return c.status === 'scheduled';
+    if (activeFilter === 'sent_today') return c.status === 'sent' && isDateToday(c.sentAt);
+    return true;
+  });
+
+  const handleCreateCampaign = async () => {
+    try {
+      const selectedGroupIds = groups.filter(g => g.isSelected).map(g => g.id);
+
+      const payload = {
+        name: campaignName,
+        message: campaignMessage,
+        groups: selectedGroupIds,
+        scheduledFor: scheduleDate || undefined,
+        // Opcionalmente, defina instanceName aqui se quiser sobrescrever
+        // instanceName: 'minha-instancia',
+      };
+
+      const res = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Erro ao criar campanha', err);
+        alert('Falha ao criar campanha.');
+        return;
+      }
+
+      setShowCreateModal(false);
+      setCampaignName('');
+      setCampaignMessage('');
+      setScheduleDate('');
+      setSelectedMedia(null);
+      setGroups(prev => prev.map(g => ({ ...g, isSelected: false })));
+
+      alert(scheduleDate ? 'Campanha agendada com sucesso!' : 'Campanha enviada com sucesso!');
+    } catch (e) {
+      console.error(e);
+      alert('Erro inesperado ao criar campanha.');
+    }
+  };
+
+  const openDeleteModal = (campaign: Campaign) => {
+    setCampaignToDelete(campaign);
+    setShowDeleteModal(true);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setCampaignToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!campaignToDelete) return;
+    try {
+      // Tentativa de exclusão via API (se implementado no backend)
+      const res = await fetch(`/api/campaigns?id=${encodeURIComponent(campaignToDelete.id)}`, {
+        method: 'DELETE',
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        console.warn('Endpoint DELETE /api/campaigns inexistente ou falhou; removendo localmente.');
+      }
+
+      setCampaigns(prev => prev.filter(c => c.id !== campaignToDelete.id));
+    } catch (e) {
+      console.error(e);
+      alert('Não foi possível excluir a campanha agora.');
+    } finally {
+      setShowDeleteModal(false);
+      setCampaignToDelete(null);
+    }
   };
 
   const getStatusConfig = (status: string) => {
@@ -147,7 +234,12 @@ export default function CampaignsPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            aria-pressed={activeFilter === 'all'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'all' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total de Campanhas</p>
@@ -157,9 +249,14 @@ export default function CampaignsPage() {
                 <Send className="w-6 h-6 text-purple-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('sent_today')}
+            aria-pressed={activeFilter === 'sent_today'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'sent_today' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Enviadas Hoje</p>
@@ -169,9 +266,14 @@ export default function CampaignsPage() {
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('scheduled')}
+            aria-pressed={activeFilter === 'scheduled'}
+            className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'scheduled' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Agendadas</p>
@@ -181,9 +283,14 @@ export default function CampaignsPage() {
                 <Clock className="w-6 h-6 text-blue-600" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <button
+            type="button"
+             onClick={() => setActiveFilter('groups_reached')}
+             aria-pressed={activeFilter === 'groups_reached'}
+             className={`text-left bg-white rounded-xl shadow-sm border p-5 transition-colors ${activeFilter === 'groups_reached' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Grupos Alcançados</p>
@@ -193,7 +300,7 @@ export default function CampaignsPage() {
                 <Users className="w-6 h-6 text-orange-600" />
               </div>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Campaigns List */}
@@ -226,7 +333,7 @@ export default function CampaignsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {campaigns.map((campaign) => {
+                {filteredCampaigns.map((campaign) => {
                   const statusConfig = getStatusConfig(campaign.status);
                   const StatusIcon = statusConfig.icon;
                   
@@ -261,7 +368,10 @@ export default function CampaignsPage() {
                           <button className="text-gray-600 hover:text-gray-900 p-1 rounded hover:bg-gray-50 transition-colors">
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors">
+                          <button
+                            onClick={() => openDeleteModal(campaign)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -440,6 +550,53 @@ export default function CampaignsPage() {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Campaign Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+              <div
+                className="fixed inset-0 transition-opacity bg-gray-900 bg-opacity-75"
+                onClick={handleCancelDelete}
+              />
+
+              <div className="relative inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                      <Trash2 className="w-6 h-6 text-red-600" />
+                    </div>
+                  </div>
+                  <div className="ml-4 w-full">
+                    <h3 className="text-xl font-bold text-gray-900">Excluir campanha</h3>
+                    <p className="mt-2 text-sm text-gray-600">
+                      Tem certeza que deseja excluir{' '}
+                      <span className="font-semibold text-gray-900">
+                        “{campaignToDelete?.name}”
+                      </span>
+                      ? Esta ação não pode ser desfeita.
+                    </p>
+
+                    <div className="flex items-center justify-end space-x-3 mt-6">
+                      <button
+                        onClick={handleCancelDelete}
+                        className="px-5 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleConfirmDelete}
+                        className="px-5 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

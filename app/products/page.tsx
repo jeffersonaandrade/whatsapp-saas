@@ -90,6 +90,24 @@ export default function ProductsPage() {
     return `${price.toFixed(2)} ${currency}`;
   };
 
+  const toggleActive = async (product: Product) => {
+    const newStatus = !product.isActive;
+    // Atualização otimista para não sumir da lista
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, isActive: newStatus } : p))
+    );
+    try {
+      await productsService.updateProduct(product.id, { isActive: newStatus });
+    } catch (error) {
+      // Reverte em caso de erro
+      setProducts((prev) =>
+        prev.map((p) => (p.id === product.id ? { ...p, isActive: !newStatus } : p))
+      );
+      console.error('Erro ao alternar ativo/inativo:', error);
+      alert('Falha ao atualizar status do produto.');
+    }
+  };
+
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto">
@@ -196,15 +214,31 @@ export default function ProductsPage() {
                       {formatPrice(product.price, product.currency)}
                     </p>
                   </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      product.isActive
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {product.isActive ? 'Ativo' : 'Inativo'}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        product.isActive
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
+                      {product.isActive ? 'Ativo' : 'Inativo'}
+                    </span>
+                    <button
+                      onClick={() => toggleActive(product)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        product.isActive ? 'bg-green-600' : 'bg-gray-300'
+                      }`}
+                      aria-pressed={product.isActive}
+                      aria-label="Alternar ativo/inativo"
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          product.isActive ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -254,8 +288,7 @@ function ProductForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    if (!formData.name || formData.price <= 0 || !formData.category) {
-      alert('Preencha nome, preço e categoria do produto.');
+    if (!formData.name || formData.price <= 0) {
       return;
     }
     onSave(formData);
@@ -284,12 +317,14 @@ function ProductForm({
               </label>
               <input
                 type="text"
-                required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${submitted && !formData.name ? 'border-red-500' : 'border-gray-300'}`}
                 placeholder="Ex: Produto Premium"
               />
+              {submitted && !formData.name && (
+                <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+              )}
             </div>
 
             <div>
@@ -312,14 +347,16 @@ function ProductForm({
                 </label>
                 <input
                   type="number"
-                  required
                   min="0"
                   step="0.01"
                   value={formData.price}
                   onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${submitted && formData.price <= 0 ? 'border-red-500' : 'border-gray-300'}`}
                   placeholder="0.00"
                 />
+                {submitted && formData.price <= 0 && (
+                  <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
+                )}
               </div>
 
               <div>
@@ -340,19 +377,15 @@ function ProductForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoria *
+                Categoria
               </label>
               <input
                 type="text"
-                required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="Ex: Eletrônicos, Roupas, etc."
               />
-              {submitted && !formData.category && (
-                <p className="mt-1 text-xs text-red-600">Campo obrigatório</p>
-              )}
             </div>
 
             <div>

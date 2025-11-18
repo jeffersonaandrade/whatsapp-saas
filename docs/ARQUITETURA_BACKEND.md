@@ -299,8 +299,8 @@ GET    /api/campaigns
   Response: Campaign[]
 
 POST   /api/campaigns
-  Body: { name, message, targetGroups, scheduledFor? }
-  Response: Campaign
+  Body: { name, message, groups: string[], scheduledFor?, instanceName?, mediaUrl?, mediaType? }
+  Response: { success: boolean, campaignId: string }
 
 PUT    /api/campaigns/:id
   Body: { status, ... }
@@ -308,7 +308,13 @@ PUT    /api/campaigns/:id
 
 DELETE /api/campaigns/:id
   Response: { success: boolean }
+
+POST   /api/campaigns/process-due
+  Body: vazio
+  Response: { success: boolean, processed: string[] }  // ids de campanhas processadas
 ```
+
+> Agendamento: configurar um cron para chamar `POST /api/campaigns/process-due` a cada minuto (ou conforme necessidade). Em ambientes sem cron, é possível usar Supabase Edge Functions Scheduler ou serviços externos (UptimeRobot, GitHub Actions, etc.).
 
 #### 6. Grupos
 
