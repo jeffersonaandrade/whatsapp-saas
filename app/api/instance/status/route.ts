@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    let instanceName = searchParams.get('instanceName');
+    let instanceName: string | null = searchParams.get('instanceName');
 
     // Se não forneceu instanceName, buscar no Supabase ou gerar baseado no accountId
     if (!instanceName) {
@@ -40,6 +40,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Garantir que instanceName não seja null (TypeScript)
+    if (!instanceName) {
+      return NextResponse.json(
+        { error: 'Erro ao determinar nome da instância' },
+        { status: 500 }
+      );
+    }
+
     // Verificar se Evolution API está configurada
     const useRealAPI = !!process.env.NEXT_PUBLIC_EVOLUTION_API_URL && !!process.env.EVOLUTION_API_KEY;
     
@@ -57,19 +65,25 @@ export async function GET(request: NextRequest) {
 
       if (!result.success) {
         console.error('[Evolution API] Erro ao verificar status:', result);
-        return NextResponse.json(
-          { 
-            error: 'Erro ao verificar status', 
-            details: result.error,
-            statusCode: result.statusCode,
-            url: result.url,
-          },
-          { status: 500 }
-        );
+        const errorDetails: Record<string, any> = {
+          error: 'Erro ao verificar status',
+          details: result.error || 'Erro desconhecido',
+        };
+        
+        // Adicionar statusCode e url apenas se existirem
+        if ('statusCode' in result && result.statusCode) {
+          errorDetails.statusCode = result.statusCode;
+        }
+        if ('url' in result && result.url) {
+          errorDetails.url = result.url;
+        }
+        
+        return NextResponse.json(errorDetails, { status: 500 });
       }
 
       // Evolution API retorna o estado da conexão
-      const responseData = result.data;
+      // Usar 'as any' para permitir acesso a propriedades que podem variar na resposta da Evolution API
+      const responseData = result.data as any;
       const state = responseData?.state || responseData?.status || 'close';
       const status = state === 'open' || state === 'connected' ? 'connected' : 'disconnected';
 
@@ -84,10 +98,17 @@ export async function GET(request: NextRequest) {
       result = await evolutionAPIMock.getInstanceStatus(instanceName);
 
       if (!result.success) {
-        return NextResponse.json(
-          { error: 'Erro ao verificar status', details: result.error },
-          { status: 500 }
-        );
+        const mockErrorDetails: Record<string, any> = {
+          error: 'Erro ao verificar status',
+          details: 'Erro desconhecido',
+        };
+        
+        // Adicionar details se existir
+        if ('error' in result && result.error) {
+          mockErrorDetails.details = result.error;
+        }
+        
+        return NextResponse.json(mockErrorDetails, { status: 500 });
       }
 
       const status = result.data?.state === 'open' ? 'connected' : 'disconnected';
