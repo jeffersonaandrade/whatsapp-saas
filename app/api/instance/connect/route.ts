@@ -83,9 +83,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { 
             error: 'Erro ao conectar instância', 
-            details: connectResult.error,
-            statusCode: connectResult.statusCode,
-            url: connectResult.url,
+            details: connectResult.error || 'Erro desconhecido',
+            statusCode: connectResult.statusCode || 500,
+            url: connectResult.url || 'N/A',
           },
           { status: 500 }
         );
