@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import CookieBanner from "@/components/CookieBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +19,13 @@ export const metadata: Metadata = {
   description: "Plataforma de atendimento via WhatsApp com bot automatizado, campanhas e gestão de equipe",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover' as const, // Importante para safe-area-inset funcionar
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,6 +38,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           {children}
+          <CookieBanner />
         </AuthProvider>
       </body>
     </html>

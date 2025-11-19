@@ -40,7 +40,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between safe-area-inset-top">
         <h1 className="text-xl font-bold text-gray-900">WhatsApp SaaS</h1>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -143,30 +143,30 @@ export default function MainLayout({ children }: MainLayoutProps) {
       )}
 
       {/* Main content */}
-      <main className="lg:pl-64 pt-16 lg:pt-0">
-        <div className="px-4 sm:px-6 lg:px-8 py-8">
+      <main className="lg:pl-64 pt-14 lg:pt-0 pb-24 lg:pb-0 min-h-screen">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
           {children}
         </div>
       </main>
 
       {/* Bottom navigation - Mobile only */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 flex justify-around items-center z-40">
-        {navigation.map((item) => {
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-2 flex justify-around items-center z-40 safe-area-inset-bottom shadow-lg">
+        {navigation.slice(0, 5).map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.name}
               href={item.href}
               className={`
-                flex flex-col items-center justify-center px-3 py-2 text-xs font-medium rounded-lg transition-colors
+                flex flex-col items-center justify-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0 flex-1
                 ${isActive 
                   ? 'text-green-600' 
                   : 'text-gray-600 hover:text-gray-900'
                 }
               `}
             >
-              <item.icon className="h-6 w-6 mb-1" />
-              <span>{item.name}</span>
+              <item.icon className="h-5 w-5 mb-0.5 flex-shrink-0" />
+              <span className="truncate text-[10px] leading-tight">{item.name}</span>
             </Link>
           );
         })}
