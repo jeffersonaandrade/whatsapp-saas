@@ -80,15 +80,13 @@ export async function POST(request: NextRequest) {
       
       if (!connectResult.success) {
         console.error('[Evolution API] Erro ao conectar:', connectResult);
-        return NextResponse.json(
-          { 
-            error: 'Erro ao conectar instância', 
-            details: connectResult.error || 'Erro desconhecido',
-            statusCode: connectResult.statusCode || 500,
-            url: connectResult.url || 'N/A',
-          },
-          { status: 500 }
-        );
+        const errorDetails = {
+          error: 'Erro ao conectar instância',
+          details: connectResult.error || 'Erro desconhecido',
+          ...(connectResult.statusCode && { statusCode: connectResult.statusCode }),
+          ...(connectResult.url && { url: connectResult.url }),
+        };
+        return NextResponse.json(errorDetails, { status: 500 });
       }
 
       // Extrair dados da resposta
