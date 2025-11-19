@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Save, Bot, MessageSquare, UserCheck, AlertCircle, Key, Info, Building2, Clock, MapPin, Truck } from 'lucide-react';
-import { BotConfig, defaultBotConfig } from '@/lib/services/bot-logic';
+import { defaultBotConfig } from '@/lib/services/bot-logic';
 import { mockDataService } from '@/lib/services/mock-data';
 import { businessConfigService } from '@/lib/services/business-config';
 import PasswordInput from '@/components/ui/PasswordInput';
