@@ -97,7 +97,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Extrair dados da resposta
-      const responseData = connectResult.data;
+      // Usar 'as any' para permitir acesso a propriedades que podem variar na resposta da Evolution API
+      const responseData = connectResult.data as any;
       const qrCode = responseData?.qrcode 
         || responseData?.qrcode?.base64 
         || responseData?.qrcode?.code 
@@ -146,10 +147,17 @@ export async function POST(request: NextRequest) {
       const result = await evolutionAPIMock.createInstance(instanceName);
 
       if (!result.success) {
-        return NextResponse.json(
-          { error: 'Erro ao criar instância', details: result.error || 'Erro desconhecido' },
-          { status: 500 }
-        );
+        const mockErrorDetails: Record<string, any> = {
+          error: 'Erro ao criar instância',
+          details: 'Erro desconhecido',
+        };
+        
+        // Adicionar details se existir
+        if ('error' in result && result.error) {
+          mockErrorDetails.details = result.error;
+        }
+        
+        return NextResponse.json(mockErrorDetails, { status: 500 });
       }
 
       return NextResponse.json({
