@@ -409,18 +409,20 @@ function ProductForm({
 
                         setUploadingImage(true);
                         try {
-                          const formData = new FormData();
-                          formData.append('image', file);
+                          // Renomear para evitar conflito com o state formData
+                          const uploadBody = new FormData();
+                          uploadBody.append('image', file);
 
                           const response = await fetch('/api/products/upload-image', {
                             method: 'POST',
-                            body: formData,
+                            body: uploadBody,
                           });
 
                           const data = await response.json();
 
                           if (data.success) {
-                            setFormData({ ...formData, imageUrl: data.imageUrl });
+                            // Usar forma funcional para garantir que usa o state correto
+                            setFormData(prev => ({ ...prev, imageUrl: data.imageUrl }));
                             setImagePreview(data.imageUrl);
                           } else {
                             alert(data.error || 'Erro ao fazer upload da imagem');
