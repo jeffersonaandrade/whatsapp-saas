@@ -34,6 +34,26 @@ export const productsService = {
     return mockProducts.filter(p => p.isActive);
   },
 
+  /**
+   * Lista produtos com filtro por status para uso na UI
+   * - 'all': retorna todos
+   * - 'active': apenas ativos
+   * - 'inactive': apenas inativos
+   */
+  async getProducts(
+    accountId: string,
+    filter: 'all' | 'active' | 'inactive' = 'all'
+  ): Promise<Product[]> {
+    // TODO: substituir por query no Supabase
+    if (filter === 'all') {
+      return [...mockProducts];
+    }
+    if (filter === 'active') {
+      return mockProducts.filter(p => p.isActive);
+    }
+    return mockProducts.filter(p => !p.isActive);
+  },
+
   async getProductById(productId: string): Promise<Product | null> {
     return mockProducts.find(p => p.id === productId) || null;
   },
