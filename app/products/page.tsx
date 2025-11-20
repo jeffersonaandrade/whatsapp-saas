@@ -13,15 +13,16 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => {
     loadProducts();
-  }, [user]);
+  }, [user, filter]);
 
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const data = await productsService.getAllProducts(user?.accountId || '');
+      const data = await productsService.getProducts(user?.accountId || '', filter);
       setProducts(data);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
@@ -98,6 +99,16 @@ export default function ProductsPage() {
     );
     try {
       await productsService.updateProduct(product.id, { isActive: newStatus });
+      // Se o filtro atual não contempla o novo status, remover da lista
+      setProducts(prev => {
+        if (filter === 'active' && !newStatus) {
+          return prev.filter(p => p.id !== product.id);
+        }
+        if (filter === 'inactive' && newStatus) {
+          return prev.filter(p => p.id !== product.id);
+        }
+        return prev;
+      });
     } catch (error) {
       // Reverte em caso de erro
       setProducts((prev) =>
@@ -119,13 +130,51 @@ export default function ProductsPage() {
               Cadastre seus produtos para que a IA possa informar valores aos clientes
             </p>
           </div>
-          <button
-            onClick={handleNew}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Novo Produto
-          </button>
+          {filter === 'all' && (
+            <button
+              onClick={handleNew}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Novo Produto
+            </button>
+          )}
+        </div>
+
+        {/* Filtros */}
+        <div className="mb-6">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                filter === 'all'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFilter('active')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                filter === 'active'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Ativos
+            </button>
+            <button
+              onClick={() => setFilter('inactive')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                filter === 'inactive'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Inativos
+            </button>
+          </div>
         </div>
 
         {/* Form Modal */}
@@ -149,17 +198,29 @@ export default function ProductsPage() {
         ) : products.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto cadastrado</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Cadastre produtos para que a IA possa informar valores aos clientes
-            </p>
-            <button
-              onClick={handleNew}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Cadastrar Primeiro Produto
-            </button>
+             <h3 className="text-lg font-medium text-gray-900 mb-2">
+               {filter === 'inactive'
+                 ? 'Nenhum produto inativo'
+                 : filter === 'active'
+                 ? 'Nenhum produto ativo'
+                 : 'Nenhum produto cadastrado'}
+             </h3>
+             <p className="text-sm text-gray-600 mb-6">
+               {filter === 'inactive'
+                 ? 'Você ainda não tem produtos inativos.'
+                 : filter === 'active'
+                 ? 'Você ainda não tem produtos ativos.'
+                 : 'Cadastre produtos para que a IA possa informar valores aos clientes'}
+             </p>
+             {filter === 'all' && (
+               <button
+                 onClick={handleNew}
+                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700"
+               >
+                 <Plus className="w-5 h-5 mr-2" />
+                 Cadastrar Primeiro Produto
+               </button>
+             )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
