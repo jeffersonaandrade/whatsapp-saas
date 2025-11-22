@@ -88,7 +88,17 @@ export const logger = new Logger();
 /**
  * Extrai contexto de request para logs
  */
-export function getRequestContext(request: Request | { headers?: Headers }): RequestContext {
+export function getRequestContext(request?: Request | { headers?: Headers }): RequestContext {
+  // Verificar se request existe antes de usar operador 'in'
+  if (!request) {
+    return {
+      ip: 'unknown',
+      userAgent: 'unknown',
+      method: undefined,
+      url: undefined,
+    };
+  }
+  
   const headers = 'headers' in request ? request.headers : new Headers();
   
   return {

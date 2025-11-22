@@ -46,6 +46,11 @@ export function validateWebhookOrigin(request: Request | NextRequest | { headers
   // Em produção, você deve validar o IP ou usar assinatura HMAC
   // Por enquanto, validação básica
   
+  // Verificar se request e headers existem
+  if (!request || !('headers' in request) || !request.headers) {
+    return { valid: false, error: 'Request ou headers inválidos' };
+  }
+  
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
   const userAgent = request.headers.get('user-agent');

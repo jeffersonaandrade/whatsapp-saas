@@ -44,7 +44,7 @@ async function proxyRequest(
   data?: any,
   headers?: Record<string, string>
 ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
-  const requestContext = getRequestContext(undefined as any);
+  const requestContext = getRequestContext();
   
   try {
     logger.debug('[Motor Client] Requisição enviada', {

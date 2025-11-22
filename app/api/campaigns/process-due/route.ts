@@ -5,7 +5,7 @@ import { logger, getRequestContext } from '@/lib/utils/logger';
 import { addSecurityHeaders } from '@/lib/utils/security';
 
 export async function POST() {
-  const requestContext = getRequestContext(undefined as any);
+  const requestContext = getRequestContext();
   
   try {
     // Buscar campanhas agendadas que já venceram
