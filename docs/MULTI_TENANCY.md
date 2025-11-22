@@ -313,7 +313,7 @@ USING (account_id IN (
 
 ## 🚀 PRÓXIMOS PASSOS
 
-1. **Executar script SQL** (`supabase_accounts_business_fields.sql`)
+1. **Executar script SQL** (`database/supabase_accounts_business_fields.sql`)
 2. **Melhorar webhook** para identificar `accountId` via `instanceName`
 3. **Criar serviço** para buscar configuração do negócio
 4. **Implementar RLS** no Supabase

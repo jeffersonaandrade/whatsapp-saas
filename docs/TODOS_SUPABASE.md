@@ -219,13 +219,13 @@ Este documento lista todos os TODOs que precisam ser implementados quando conect
 ---
 
 ### 9. **Scripts SQL**
-- [ ] Executar `supabase_accounts_business_fields.sql` no Supabase
-- [ ] Executar `supabase_products_table.sql` no Supabase
+- [ ] Executar `database/supabase_accounts_business_fields.sql` no Supabase
+- [ ] Executar `database/supabase_products_table.sql` no Supabase
 - [ ] Verificar se todas as tabelas foram criadas corretamente
 
 **Arquivos:**
-- `supabase_accounts_business_fields.sql`
-- `supabase_products_table.sql`
+- `database/supabase_accounts_business_fields.sql`
+- `database/supabase_products_table.sql`
 
 ---
 
@@ -302,8 +302,8 @@ Este documento lista todos os TODOs que precisam ser implementados quando conect
 8. ✅ `app/dashboard/page.tsx` - Dashboard
 
 ### Scripts SQL que Precisam ser Executados:
-1. ✅ `supabase_accounts_business_fields.sql` - Campos adicionais na tabela accounts
-2. ✅ `supabase_products_table.sql` - Tabela de produtos
+1. ✅ `database/supabase_accounts_business_fields.sql` - Campos adicionais na tabela accounts
+2. ✅ `database/supabase_products_table.sql` - Tabela de produtos
 
 ### Configurações Necessárias:
 1. ✅ Variáveis de ambiente (`.env.local`)

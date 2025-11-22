@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evolutionAPI } from '@/lib/evolution-api';
+import { motorClientAPI } from '@/lib/motor-client';
 import { mockDataService } from '@/lib/services/mock-data';
 import { analyzeIntention, generateBotResponse, GroqConfig } from '@/lib/services/groq-ai';
-import { canSendMessage, recordMessageSent } from '@/lib/services/rate-limiter';
+import { canSendMessage, recordMessageSent } from '@/lib/services/whatsapp-rate-limiter';
 import { productsService, formatProductsForAI, findProductByName } from '@/lib/services/products';
 import { businessConfigService } from '@/lib/services/business-config';
 import { clearContextAfterClosing } from '@/lib/utils/conversation-context';
 import { defaultBotConfig } from '@/lib/services/bot-logic';
+import { logger, getRequestContext } from '@/lib/utils/logger';
+import { validateWebhookOrigin, validateRequestSize, addSecurityHeaders } from '@/lib/utils/security';
+import { sanitizeMessage, isValidInstanceName, validatePayloadSize } from '@/lib/utils/validation';
 
 /**
  * Webhook que recebe eventos da Evolution API
@@ -18,33 +21,82 @@ import { defaultBotConfig } from '@/lib/services/bot-logic';
  * - qrcode.update: quando o QR Code é atualizado
  */
 export async function POST(request: NextRequest) {
+  const requestContext = getRequestContext(request);
+  
   try {
+    // Validar origem do webhook (segurança)
+    const originValidation = validateWebhookOrigin(request);
+    if (!originValidation.valid) {
+      logger.warn('[Webhook] Origem não autorizada', { error: originValidation.error }, requestContext);
+      const response = NextResponse.json(
+        { error: 'Não autorizado' },
+        { status: 401 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    // Validar tamanho da requisição
+    const contentLength = request.headers.get('content-length');
+    const sizeValidation = validateRequestSize(contentLength, 5); // Máximo 5MB para webhook
+    if (!sizeValidation.valid) {
+      logger.warn('[Webhook] Requisição muito grande', { error: sizeValidation.error }, requestContext);
+      const response = NextResponse.json(
+        { error: sizeValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
     const body = await request.json();
+    
+    // Validar tamanho do payload
+    const payloadValidation = validatePayloadSize(body, 5000); // 5MB
+    if (!payloadValidation.valid) {
+      logger.warn('[Webhook] Payload muito grande', { error: payloadValidation.error }, requestContext);
+      const response = NextResponse.json(
+        { error: payloadValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
     const { event, data } = body;
 
-    console.log('Webhook recebido:', { event, data });
+    logger.info('[Webhook] Evento recebido', {
+      event,
+      hasData: !!data,
+      instanceName: data?.instanceName,
+      messageCount: data?.messages?.length,
+    }, requestContext);
 
     // Processar diferentes tipos de eventos
     switch (event) {
       case 'messages.upsert':
-        return await handleNewMessage(data);
+        return await handleNewMessage(data, requestContext);
       
       case 'connection.update':
-        return await handleConnectionUpdate(data);
+        return await handleConnectionUpdate(data, requestContext);
       
       case 'qrcode.update':
-        return await handleQRCodeUpdate(data);
+        return await handleQRCodeUpdate(data, requestContext);
       
       default:
-        console.log('Evento não tratado:', event);
-        return NextResponse.json({ success: true, message: 'Evento recebido' });
+        logger.warn('[Webhook] Evento não tratado', { event }, requestContext);
+        const response = NextResponse.json({ success: true, message: 'Evento recebido' });
+        addSecurityHeaders(response);
+      return response;
     }
   } catch (error) {
-    console.error('Erro ao processar webhook:', error);
-    return NextResponse.json(
+    logger.error('[Webhook] Erro ao processar webhook', error, {}, requestContext);
+    const errorResponse = NextResponse.json(
       { error: 'Erro ao processar webhook' },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
 
@@ -52,9 +104,36 @@ export async function POST(request: NextRequest) {
  * Processa uma nova mensagem recebida
  * Esta é a lógica principal do bot
  */
-async function handleNewMessage(data: any) {
+async function handleNewMessage(data: any, requestContext: any) {
   try {
     const { instanceName, messages } = data;
+
+    if (!instanceName) {
+      logger.error('[Webhook] handleNewMessage: instanceName ausente', undefined, { data }, requestContext);
+      const response = NextResponse.json({ success: false, error: 'instanceName é obrigatório' }, { status: 400 });
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    // Validar formato do instanceName
+    if (!isValidInstanceName(instanceName)) {
+      logger.error('[Webhook] handleNewMessage: instanceName inválido', { instanceName }, requestContext);
+      const response = NextResponse.json({ success: false, error: 'instanceName inválido' }, { status: 400 });
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      logger.warn('[Webhook] handleNewMessage: nenhuma mensagem no array', { instanceName }, requestContext);
+      const response = NextResponse.json({ success: true, message: 'Nenhuma mensagem para processar' });
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    logger.info('[Webhook] Processando mensagens', {
+      instanceName,
+      messageCount: messages.length,
+    }, requestContext);
 
     // Processar cada mensagem recebida
     for (const message of messages) {
@@ -79,7 +158,8 @@ async function handleNewMessage(data: any) {
         message.pushName || undefined
       );
 
-      const sanitizedIncomingMessage = rawMessageText.trim();
+      // Sanitizar mensagem recebida (proteção XSS)
+      const sanitizedIncomingMessage = sanitizeMessage(rawMessageText.trim());
       const incomingBody = sanitizedIncomingMessage || '[mensagem não textual]';
 
       // Salvar mensagem recebida
@@ -112,7 +192,11 @@ async function handleNewMessage(data: any) {
       // Verificar se a conversa está sendo atendida por um humano
       // Se sim, NÃO chamar IA (economiza rate limits)
       if (conversation.status === 'in_service' || conversation.status === 'waiting_agent') {
-        console.log(`Conversa ${conversation.id} está com atendente humano. Pulando processamento por IA.`);
+        logger.info('[Webhook] Conversa com atendente humano, pulando IA', {
+          conversationId: conversation.id,
+          status: conversation.status,
+          contactPhone,
+        }, requestContext);
         // Não processar pelo bot, está com atendente humano
         // Apenas salvar a mensagem recebida, sem processar
         continue;
@@ -125,7 +209,11 @@ async function handleNewMessage(data: any) {
       // Verificar rate limit antes de enviar qualquer mensagem
       const rateLimitCheck = canSendMessage(instanceName);
       if (!rateLimitCheck.allowed) {
-        console.warn(`Rate limit excedido. Retry após ${rateLimitCheck.retryAfter}s`);
+        logger.warn('[Webhook] Rate limit excedido', {
+          instanceName,
+          retryAfter: rateLimitCheck.retryAfter,
+          contactPhone,
+        }, requestContext);
         // Salvar mensagem para processar depois
         // TODO: Implementar fila de mensagens
         continue;
@@ -175,7 +263,10 @@ async function handleNewMessage(data: any) {
 
       // Se não tem API key do Groq, usar mensagem padrão do bot (fallback)
       if (!groqConfig.apiKey) {
-        console.warn('GROQ_API_KEY não configurada, usando fallback');
+        logger.warn('[Webhook] GROQ_API_KEY não configurada, usando fallback', {
+          instanceName,
+          contactPhone,
+        }, requestContext);
         const fallbackMessage = defaultBotConfig.defaultMessage || 'Obrigado por sua mensagem. Nossa equipe entrará em contato em breve.';
         
         await mockDataService.addMessage({
@@ -321,68 +412,116 @@ async function handleNewMessage(data: any) {
         sentBy: 'bot',
       });
 
-      console.log('Resposta gerada para cliente:', botResponse);
+      logger.info('[Webhook] Resposta gerada pelo bot', {
+        instanceName,
+        contactPhone,
+        responseLength: botResponse.length,
+        conversationId: conversation.id,
+      }, requestContext);
 
       await sendMessage(instanceName, contactPhone, botResponse);
       recordMessageSent(instanceName);
     }
 
-    return NextResponse.json({ success: true, message: 'Mensagens processadas' });
+    logger.info('[Webhook] Mensagens processadas com sucesso', {
+      instanceName,
+      processedCount: messages.length,
+    }, requestContext);
+
+    const response = NextResponse.json({ success: true, message: 'Mensagens processadas' });
+    addSecurityHeaders(response);
+    return response;
   } catch (error) {
-    console.error('Erro ao processar mensagem:', error);
-    return NextResponse.json(
+    logger.error('[Webhook] Erro ao processar mensagem', error, {
+      instanceName: data?.instanceName,
+    }, requestContext);
+    const errorResponse = NextResponse.json(
       { error: 'Erro ao processar mensagem' },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
 
 
 /**
- * Envia mensagem via Evolution API
+ * Envia mensagem via Motor
  */
 async function sendMessage(instanceName: string, phoneNumber: string, text: string) {
   try {
     // Formatar número de telefone (remover caracteres especiais)
     const formattedNumber = phoneNumber.replace(/\D/g, '');
 
-    const result = await evolutionAPI.sendTextMessage(instanceName, {
+    logger.debug('[Webhook] Enviando mensagem via Motor', {
+      instanceName,
+      phoneNumber: formattedNumber,
+      textLength: text.length,
+    });
+
+    const result = await motorClientAPI.sendMessage(instanceName, {
       number: `${formattedNumber}@s.whatsapp.net`,
       text,
     });
 
     if (result.success) {
-      // Salvar mensagem enviada
-      // TODO: Salvar no Supabase
-      console.log('Mensagem enviada:', text);
+      logger.info('[Webhook] Mensagem enviada com sucesso', {
+        instanceName,
+        phoneNumber: formattedNumber,
+      });
+    } else {
+      logger.error('[Webhook] Erro ao enviar mensagem via Motor', result.error, {
+        instanceName,
+        phoneNumber: formattedNumber,
+        statusCode: result.statusCode,
+      });
     }
 
     return result;
   } catch (error) {
-    console.error('Erro ao enviar mensagem:', error);
+    logger.error('[Webhook] Erro ao enviar mensagem', error, {
+      instanceName,
+      phoneNumber,
+    });
     throw error;
   }
 }
 
 /**
- * Envia mídia (imagem, vídeo, documento) via Evolution API
+ * Envia mídia (imagem, vídeo, documento) via Motor
  */
 async function sendMedia(instanceName: string, phoneNumber: string, mediaUrl: string, caption?: string) {
   try {
     // Formatar número de telefone (remover caracteres especiais)
     const formattedNumber = phoneNumber.replace(/\D/g, '');
 
-    const result = await evolutionAPI.sendMedia(instanceName, `${formattedNumber}@s.whatsapp.net`, mediaUrl, caption);
+    const result = await motorClientAPI.sendMedia(instanceName, {
+      number: `${formattedNumber}@s.whatsapp.net`,
+      mediaUrl,
+      caption,
+    });
 
     if (result.success) {
-      // Salvar mensagem enviada
-      // TODO: Salvar no Supabase
-      console.log('Mídia enviada:', mediaUrl);
+      logger.info('[Webhook] Mídia enviada com sucesso', {
+        instanceName,
+        phoneNumber: formattedNumber,
+        mediaUrl,
+      });
+    } else {
+      logger.error('[Webhook] Erro ao enviar mídia via Motor', result.error, {
+        instanceName,
+        phoneNumber: formattedNumber,
+        statusCode: result.statusCode,
+      });
     }
 
     return result;
   } catch (error) {
-    console.error('Erro ao enviar mídia:', error);
+    logger.error('[Webhook] Erro ao enviar mídia', error, {
+      instanceName,
+      phoneNumber,
+      mediaUrl,
+    });
     throw error;
   }
 }
@@ -398,9 +537,14 @@ async function sendDefaultMessage(instanceName: string, phoneNumber: string) {
 /**
  * Atualiza status da conexão
  */
-async function handleConnectionUpdate(data: any) {
+async function handleConnectionUpdate(data: any, requestContext: any) {
   const { instanceName, state } = data;
-  console.log('Status da conexão atualizado:', { instanceName, state });
+  
+  logger.info('[Webhook] Status da conexão atualizado', {
+    instanceName,
+    state,
+    isConnected: state === 'open' || state === 'connected',
+  }, requestContext);
   
   // TODO: Atualizar status no Supabase
   // await mockDataService.updateInstanceStatus(instanceId, state === 'open' ? 'connected' : 'disconnected');
@@ -411,13 +555,18 @@ async function handleConnectionUpdate(data: any) {
 /**
  * Atualiza QR Code
  */
-async function handleQRCodeUpdate(data: any) {
+async function handleQRCodeUpdate(data: any, requestContext: any) {
   const { instanceName, qrcode } = data;
-  console.log('QR Code atualizado:', { instanceName });
+  
+  logger.info('[Webhook] QR Code atualizado', {
+    instanceName,
+    hasQrCode: !!qrcode,
+  }, requestContext);
   
   // TODO: Emitir evento via WebSocket ou Server-Sent Events para atualizar o frontend
   // Por enquanto, o frontend faz polling
   
   return NextResponse.json({ success: true });
 }
+
 

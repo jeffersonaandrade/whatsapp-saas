@@ -112,11 +112,11 @@
    - Cliente Supabase pronto
 
 ### 📝 Scripts SQL Criados:
-1. **`supabase_migrations.sql`** - ✅ Criado
+1. **`database/supabase_migrations.sql`** - ✅ Criado
    - Todas as tabelas necessárias
    - Índices para performance
 
-2. **`supabase_products_table.sql`** - ✅ Criado
+2. **`database/supabase_products_table.sql`** - ✅ Criado
    - Tabela de produtos
 
 ### 🛡️ Segurança e Permissões
@@ -259,6 +259,6 @@ whatsapp-saas/
 │   ├── groq-plan-analysis.md  ✅ Análise do plano Groq
 │   └── STATUS_PROJETO.md      ✅ Este arquivo
 │
-└── supabase_products_table.sql ✅ Script SQL produtos
+└── database/supabase_products_table.sql ✅ Script SQL produtos
 ```
 

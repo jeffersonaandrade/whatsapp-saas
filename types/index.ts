@@ -139,6 +139,8 @@ export interface EvolutionAPIResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  statusCode?: number;
+  url?: string;
 }
 
 export interface QRCodeResponse {

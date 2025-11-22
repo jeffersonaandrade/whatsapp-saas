@@ -215,7 +215,7 @@ IA: "Sim! Fazemos entregas na região. A taxa de entrega é R$ 8,00.
 
 ## 🚀 PRÓXIMOS PASSOS
 
-1. **Executar script SQL** (`supabase_accounts_business_fields.sql`)
+1. **Executar script SQL** (`database/supabase_accounts_business_fields.sql`)
 2. **Conectar tela ao Supabase** (substituir mocks)
 3. **Melhorar webhook** para usar configurações do negócio
 4. **Personalizar prompt da IA** baseado no `business_type`

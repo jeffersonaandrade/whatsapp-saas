@@ -1,42 +1,112 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evolutionAPIMock } from '@/lib/services/evolution-api-mock';
+import { motorClientAPI } from '@/lib/motor-client';
+import { getAuthenticatedUser } from '@/lib/utils/auth';
+import { logger, getRequestContext } from '@/lib/utils/logger';
+import { isValidInstanceName, validatePayloadSize } from '@/lib/utils/validation';
+import { validateRequestSize, addSecurityHeaders } from '@/lib/utils/security';
 
 /**
  * API Route para desconectar instância
- * Em produção, isso chamaria a Evolution API real
+ * Faz proxy para o Motor (Serviço Externo)
  */
 export async function POST(request: NextRequest) {
+  const requestContext = getRequestContext(request);
+  
   try {
+    // Validar tamanho da requisição
+    const contentLength = request.headers.get('content-length');
+    const sizeValidation = validateRequestSize(contentLength, 1);
+    if (!sizeValidation.valid) {
+      logger.warn('[Instance Disconnect] Requisição muito grande', { error: sizeValidation.error }, requestContext);
+      const response = NextResponse.json(
+        { error: sizeValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    // Verificar autenticação
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      logger.warn('[Instance Disconnect] Tentativa sem autenticação', {}, requestContext);
+      const response = NextResponse.json(
+        { error: 'Não autenticado' },
+        { status: 401 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
+    const requestContextWithUser = { ...requestContext, userId: user.id, accountId: user.accountId };
+
     const body = await request.json();
+    
+    // Validar payload
+    const payloadValidation = validatePayloadSize(body, 100);
+    if (!payloadValidation.valid) {
+      logger.warn('[Instance Disconnect] Payload muito grande', { error: payloadValidation.error }, requestContextWithUser);
+      const response = NextResponse.json(
+        { error: payloadValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
     const { instanceName } = body;
 
-    if (!instanceName) {
-      return NextResponse.json(
-        { error: 'instanceName é obrigatório' },
+    // Validar formato do instanceName se fornecido
+    if (instanceName && !isValidInstanceName(instanceName)) {
+      logger.warn('[Instance Disconnect] instanceName inválido', { instanceName }, requestContextWithUser);
+      const response = NextResponse.json(
+        { error: 'Nome da instância inválido' },
         { status: 400 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
 
-    // Usar mock por enquanto
-    const result = await evolutionAPIMock.logoutInstance(instanceName);
+    logger.info('[Instance Disconnect] Fazendo proxy para o Motor', {
+      instanceName,
+      accountId: user.accountId,
+    }, requestContextWithUser);
+
+    // Fazer proxy para o Motor
+    const result = await motorClientAPI.disconnectInstance({ instanceName });
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: 'Erro ao desconectar instância' },
-        { status: 500 }
+      logger.error('[Instance Disconnect] Erro no Motor', result.error, {
+        instanceName,
+        statusCode: result.statusCode,
+      }, requestContextWithUser);
+      
+      const errorResponse = NextResponse.json(
+        { 
+          error: result.error || 'Erro ao desconectar instância',
+          details: result.statusCode ? `Status: ${result.statusCode}` : undefined,
+        },
+        { status: result.statusCode || 500 }
       );
+      addSecurityHeaders(errorResponse);
+      return errorResponse;
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Instância desconectada com sucesso',
-    });
-  } catch (error) {
-    console.error('Erro ao desconectar instância:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+    logger.info('[Instance Disconnect] Proxy bem-sucedido', {
+      instanceName,
+    }, requestContextWithUser);
+
+    // Retornar resposta do Motor
+    const response = NextResponse.json(result.data || { success: true, message: 'Instância desconectada com sucesso' });
+    addSecurityHeaders(response);
+    return response;
+  } catch (error: any) {
+    logger.error('[Instance Disconnect] Erro inesperado', error, {}, requestContext);
+    const errorResponse = NextResponse.json(
+      { error: 'Erro interno do servidor', details: error.message },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
-

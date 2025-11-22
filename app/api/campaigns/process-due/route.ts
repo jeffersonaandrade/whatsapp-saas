@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { evolutionAPI } from '@/lib/evolution-api';
+import { motorClientAPI } from '@/lib/motor-client';
+import { logger, getRequestContext } from '@/lib/utils/logger';
+import { addSecurityHeaders } from '@/lib/utils/security';
 
 export async function POST() {
+  const requestContext = getRequestContext(undefined as any);
+  
   try {
     // Buscar campanhas agendadas que já venceram
     const { data: dueCampaigns, error: campaignsError } = await supabase
@@ -12,10 +16,13 @@ export async function POST() {
       .lte('scheduled_for', new Date().toISOString());
 
     if (campaignsError) {
-      return NextResponse.json(
+      logger.error('[Campaigns Process Due] Erro ao buscar campanhas', campaignsError, {}, requestContext);
+      const response = NextResponse.json(
         { error: 'Erro ao buscar campanhas vencidas', details: campaignsError.message },
         { status: 500 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
 
     const processed: string[] = [];
@@ -32,25 +39,47 @@ export async function POST() {
         .eq('status', 'pending');
 
       if (pendingErr) {
+        logger.error('[Campaigns Process Due] Erro ao buscar deliveries', pendingErr, { campaignId: campaign.id }, requestContext);
         continue;
       }
 
       for (const delivery of pendingDeliveries || []) {
         try {
           if (campaign.media_url && campaign.media_type) {
-            await evolutionAPI.sendGroupMedia(instanceName, delivery.group_id, campaign.media_url, campaign.message);
+            // Enviar mídia via Motor
+            const result = await motorClientAPI.sendGroupMedia(
+              instanceName,
+              delivery.group_id,
+              campaign.media_url,
+              campaign.message
+            );
+            
+            if (!result.success) {
+              throw new Error(result.error || 'Erro ao enviar mídia');
+            }
           } else {
-            await evolutionAPI.sendGroupMessage(instanceName, {
+            // Enviar mensagem de texto via Motor
+            const result = await motorClientAPI.sendGroupMessage(instanceName, {
               groupId: delivery.group_id,
               text: campaign.message,
             });
+            
+            if (!result.success) {
+              throw new Error(result.error || 'Erro ao enviar mensagem');
+            }
           }
 
+          // Marcar como enviado
           await supabase
             .from('campaign_deliveries')
             .update({ status: 'sent', sent_at: new Date().toISOString(), error: null })
             .eq('id', delivery.id);
         } catch (err: any) {
+          logger.error('[Campaigns Process Due] Erro ao enviar delivery', err, {
+            deliveryId: delivery.id,
+            groupId: delivery.group_id,
+          }, requestContext);
+          
           await supabase
             .from('campaign_deliveries')
             .update({ status: 'failed', error: String(err) })
@@ -75,13 +104,20 @@ export async function POST() {
       processed.push(campaign.id);
     }
 
-    return NextResponse.json({ success: true, processed });
-  } catch (error) {
-    return NextResponse.json(
+    logger.info('[Campaigns Process Due] Processamento concluído', {
+      processedCount: processed.length,
+    }, requestContext);
+
+    const response = NextResponse.json({ success: true, processed });
+    addSecurityHeaders(response);
+    return response;
+  } catch (error: any) {
+    logger.error('[Campaigns Process Due] Erro inesperado', error, {}, requestContext);
+    const errorResponse = NextResponse.json(
       { error: 'Erro ao processar campanhas', details: String(error) },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
-
-

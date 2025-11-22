@@ -1,177 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evolutionAPI } from '@/lib/evolution-api';
-import { evolutionAPIMock } from '@/lib/services/evolution-api-mock';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { motorClientAPI } from '@/lib/motor-client';
 import { getAuthenticatedUser } from '@/lib/utils/auth';
+import { logger, getRequestContext } from '@/lib/utils/logger';
+import { validatePayloadSize } from '@/lib/utils/validation';
+import { validateRequestSize, addSecurityHeaders } from '@/lib/utils/security';
 
 /**
  * API Route para conectar instância e obter QR Code
- * Usa Evolution API real se configurada, senão usa mock
+ * Faz proxy para o Motor (Serviço Externo)
  */
 export async function POST(request: NextRequest) {
+  const requestContext = getRequestContext(request);
+  
   try {
+    // Validar tamanho da requisição
+    const contentLength = request.headers.get('content-length');
+    const sizeValidation = validateRequestSize(contentLength, 1);
+    if (!sizeValidation.valid) {
+      logger.warn('[Instance Connect] Requisição muito grande', { error: sizeValidation.error }, requestContext);
+      const response = NextResponse.json(
+        { error: sizeValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
+    }
+
     // Verificar autenticação
     const user = await getAuthenticatedUser(request);
     if (!user) {
-      return NextResponse.json(
+      logger.warn('[Instance Connect] Tentativa sem autenticação', {}, requestContext);
+      const response = NextResponse.json(
         { error: 'Não autenticado' },
         { status: 401 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
+
+    const requestContextWithUser = { ...requestContext, userId: user.id, accountId: user.accountId };
 
     const body = await request.json();
-    let { instanceName } = body;
-
-    // Se não forneceu instanceName, gerar baseado no accountId (sem hífens)
-    if (!instanceName) {
-      // Remover hífens do accountId para gerar o nome da instância
-      const accountIdWithoutHyphens = user.accountId.replace(/-/g, '');
-      instanceName = `instance${accountIdWithoutHyphens}`;
+    
+    // Validar payload
+    const payloadValidation = validatePayloadSize(body, 100);
+    if (!payloadValidation.valid) {
+      logger.warn('[Instance Connect] Payload muito grande', { error: payloadValidation.error }, requestContextWithUser);
+      const response = NextResponse.json(
+        { error: payloadValidation.error },
+        { status: 413 }
+      );
+      addSecurityHeaders(response);
+      return response;
     }
 
-    // Verificar se Evolution API está configurada
-    const useRealAPI = !!process.env.NEXT_PUBLIC_EVOLUTION_API_URL && !!process.env.EVOLUTION_API_KEY;
-    
-    console.log('[Instance Connect] Configuração:', {
-      useRealAPI,
-      evolutionApiUrl: process.env.NEXT_PUBLIC_EVOLUTION_API_URL || 'não configurado',
-      hasApiKey: !!process.env.EVOLUTION_API_KEY,
+    const { instanceName } = body;
+
+    logger.info('[Instance Connect] Fazendo proxy para o Motor', {
       accountId: user.accountId,
       instanceName,
-    });
-    
-    if (useRealAPI) {
-      // PASSO 1: Verificar se existe instância para o accountId no Supabase
-      const { data: existingInstance, error: dbError } = await supabaseAdmin
-        .from('instances')
-        .select('*')
-        .eq('account_id', user.accountId)
-        .maybeSingle(); // maybeSingle() retorna null se não encontrar, sem erro
+    }, requestContextWithUser);
 
-      if (dbError) {
-        console.error('[Supabase] Erro ao buscar instância:', dbError);
-      }
+    // Fazer proxy para o Motor
+    const result = await motorClientAPI.connectInstance({ instanceName });
 
-      if (existingInstance) {
-        console.log('[Supabase] Instância encontrada:', existingInstance.name, existingInstance.status);
-        
-        // Se já está conectada, retornar sucesso
-        if (existingInstance.status === 'connected') {
-          return NextResponse.json({
-            success: true,
-            qrCode: null,
-            instanceName: existingInstance.name,
-            status: 'connected',
-            phoneNumber: existingInstance.phone_number || null,
-            message: 'Instância já está conectada',
-          });
-        }
-
-        // Se está desconectada, usar o nome da instância existente para obter QR Code
-        instanceName = existingInstance.name;
-      }
-
-      // PASSO 2 e 3: Chamar Evolution API (que verifica se existe e cria se necessário)
-      console.log(`[Evolution API] Conectando instância: ${instanceName}`);
-      
-      // Chamar endpoint do Evolution API: POST /api/instance/connect
-      // O Evolution API só precisa do header 'apikey', não precisa de cookies
-      const connectResult = await evolutionAPI.connectInstance(instanceName);
-      
-      if (!connectResult.success) {
-        console.error('[Evolution API] Erro ao conectar:', connectResult);
-        const errorDetails: Record<string, any> = {
-          error: 'Erro ao conectar instância',
-          details: connectResult.error || 'Erro desconhecido',
-        };
-        
-        // Adicionar statusCode e url apenas se existirem
-        if ('statusCode' in connectResult && connectResult.statusCode) {
-          errorDetails.statusCode = connectResult.statusCode;
-        }
-        if ('url' in connectResult && connectResult.url) {
-          errorDetails.url = connectResult.url;
-        }
-        
-        return NextResponse.json(errorDetails, { status: 500 });
-      }
-
-      // Extrair dados da resposta
-      // Usar 'as any' para permitir acesso a propriedades que podem variar na resposta da Evolution API
-      const responseData = connectResult.data as any;
-      const qrCode = responseData?.qrcode 
-        || responseData?.qrcode?.base64 
-        || responseData?.qrcode?.code 
-        || responseData?.base64 
-        || responseData?.code;
-      
-      const returnedInstanceName = responseData?.instanceName || instanceName;
-      const instanceId = responseData?.instanceId;
-      const status = responseData?.status || (qrCode ? 'connecting' : 'connected');
-      const phoneNumber = responseData?.phoneNumber;
-
-      // Salvar/atualizar instância no Supabase
-      const { error: upsertError } = await supabaseAdmin
-        .from('instances')
-        .upsert({
-          account_id: user.accountId,
-          name: returnedInstanceName,
-          status: status === 'connected' ? 'connected' : 'connecting',
-          phone_number: phoneNumber || null,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'name',
-        });
-
-      if (upsertError) {
-        console.error('[Supabase] Erro ao salvar instância:', upsertError);
-      }
-
-      // Retornar resposta
-      return NextResponse.json({
-        success: true,
-        qrCode: qrCode || null,
-        instanceName: returnedInstanceName,
-        instanceId: instanceId || null,
-        status: status,
-        phoneNumber: phoneNumber || null,
-        message: qrCode 
-          ? 'Escaneie o QR Code com o WhatsApp' 
-          : status === 'connected'
-          ? 'Instância já está conectada'
-          : 'Conectando...',
-      });
-    } else {
-      // Usar mock para desenvolvimento
-      console.log('[Mock] Usando Evolution API Mock');
-      const result = await evolutionAPIMock.createInstance(instanceName);
-
-      if (!result.success) {
-        const mockErrorDetails: Record<string, any> = {
-          error: 'Erro ao criar instância',
-          details: 'Erro desconhecido',
-        };
-        
-        // Adicionar details se existir
-        if ('error' in result && result.error) {
-          mockErrorDetails.details = result.error;
-        }
-        
-        return NextResponse.json(mockErrorDetails, { status: 500 });
-      }
-
-      return NextResponse.json({
-        success: true,
-        qrCode: result.data?.base64 || result.data?.code,
+    if (!result.success) {
+      logger.error('[Instance Connect] Erro no Motor', result.error, {
         instanceName,
-      });
+        statusCode: result.statusCode,
+      }, requestContextWithUser);
+      
+      const errorResponse = NextResponse.json(
+        { 
+          error: result.error || 'Erro ao conectar instância',
+          details: result.statusCode ? `Status: ${result.statusCode}` : undefined,
+        },
+        { status: result.statusCode || 500 }
+      );
+      addSecurityHeaders(errorResponse);
+      return errorResponse;
     }
+
+    logger.info('[Instance Connect] Proxy bem-sucedido', {
+      instanceName,
+      hasQrCode: !!result.data?.qrCode,
+      status: result.data?.status,
+    }, requestContextWithUser);
+
+    // Retornar resposta do Motor
+    const response = NextResponse.json(result.data || { success: true });
+    addSecurityHeaders(response);
+    return response;
   } catch (error: any) {
-    console.error('Erro ao conectar instância:', error);
-    return NextResponse.json(
+    logger.error('[Instance Connect] Erro inesperado', error, {}, requestContext);
+    const errorResponse = NextResponse.json(
       { error: 'Erro interno do servidor', details: error.message },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
-

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { evolutionAPI } from '@/lib/evolution-api';
+import { motorClientAPI } from '@/lib/motor-client';
+import { logger, getRequestContext } from '@/lib/utils/logger';
+import { addSecurityHeaders } from '@/lib/utils/security';
 
 type CreateCampaignBody = {
   name: string;
@@ -13,6 +15,8 @@ type CreateCampaignBody = {
 };
 
 export async function POST(request: NextRequest) {
+  const requestContext = getRequestContext(request);
+  
   try {
     const body = (await request.json()) as CreateCampaignBody;
     const {
@@ -26,10 +30,12 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!name || !message || !groups?.length) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Campos obrigatórios: name, message, groups' },
         { status: 400 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
 
     const usedInstanceName =
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const status = scheduledFor ? 'scheduled' : 'sent';
 
-    // Criar campanha
+    // Criar campanha no Supabase
     const { data: campaign, error: insertError } = await supabase
       .from('campaigns')
       .insert([
@@ -58,10 +64,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError || !campaign) {
-      return NextResponse.json(
+      logger.error('[Campaigns] Erro ao criar campanha no Supabase', insertError, { name }, requestContext);
+      const response = NextResponse.json(
         { error: 'Erro ao criar campanha', details: insertError?.message },
         { status: 500 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
 
     // Criar deliveries pendentes
@@ -77,33 +86,66 @@ export async function POST(request: NextRequest) {
       .insert(deliveriesToInsert);
 
     if (deliveryError) {
-      return NextResponse.json(
+      logger.error('[Campaigns] Erro ao criar deliveries', deliveryError, { campaignId: campaign.id }, requestContext);
+      const response = NextResponse.json(
         { error: 'Erro ao criar entregas', details: deliveryError.message },
         { status: 500 }
       );
+      addSecurityHeaders(response);
+      return response;
     }
 
-    // Se não foi agendada, enviar imediatamente
+    // Se não foi agendada, enviar imediatamente via Motor
     if (!scheduledFor) {
+      logger.info('[Campaigns] Enviando mensagens imediatamente via Motor', {
+        campaignId: campaign.id,
+        groupsCount: groups.length,
+        instanceName: usedInstanceName,
+      }, requestContext);
+
       for (const groupId of groups) {
-        if (mediaUrl && mediaType) {
-          await evolutionAPI.sendGroupMedia(usedInstanceName, groupId, mediaUrl, message);
-        } else {
-          await evolutionAPI.sendGroupMessage(usedInstanceName, {
+        try {
+          if (mediaUrl && mediaType) {
+            // Enviar mídia via Motor
+            const result = await motorClientAPI.sendGroupMedia(usedInstanceName, groupId, mediaUrl, message);
+            if (!result.success) {
+              logger.error('[Campaigns] Erro ao enviar mídia via Motor', result.error, {
+                groupId,
+                instanceName: usedInstanceName,
+              }, requestContext);
+            }
+          } else {
+            // Enviar mensagem de texto via Motor
+            const result = await motorClientAPI.sendGroupMessage(usedInstanceName, {
+              groupId,
+              text: message,
+            });
+            if (!result.success) {
+              logger.error('[Campaigns] Erro ao enviar mensagem via Motor', result.error, {
+                groupId,
+                instanceName: usedInstanceName,
+              }, requestContext);
+            }
+          }
+        } catch (error: any) {
+          logger.error('[Campaigns] Erro ao enviar para grupo', error, {
             groupId,
-            text: message,
-          });
+            instanceName: usedInstanceName,
+          }, requestContext);
         }
       }
     }
 
-    return NextResponse.json({ success: true, campaignId: campaign.id });
-  } catch (error) {
-    return NextResponse.json(
+    const response = NextResponse.json({ success: true, campaignId: campaign.id });
+    addSecurityHeaders(response);
+    return response;
+  } catch (error: any) {
+    logger.error('[Campaigns] Erro inesperado', error, {}, requestContext);
+    const errorResponse = NextResponse.json(
       { error: 'Erro interno do servidor', details: String(error) },
       { status: 500 }
     );
+    addSecurityHeaders(errorResponse);
+    return errorResponse;
   }
 }
-
-

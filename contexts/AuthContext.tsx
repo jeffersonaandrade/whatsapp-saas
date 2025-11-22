@@ -27,23 +27,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // TODO: Verificar se há sessão ativa no Supabase
-    // Por enquanto, simula verificação de sessão
+    // Verificar sessão ao carregar
     checkSession();
+
+    // Verificar sessão periodicamente (a cada 5 minutos)
+    const interval = setInterval(() => {
+      checkSession();
+    }, 5 * 60 * 1000); // 5 minutos
+
+    return () => clearInterval(interval);
   }, []);
 
   const checkSession = async () => {
     try {
-      // TODO: Implementar verificação real com Supabase
-      // const { data: { session } } = await supabase.auth.getSession()
-      
-      // Simulação: verifica se há um usuário no localStorage
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      // Verificar sessão via API local (porta 3000)
+      const response = await fetch('/api/auth/session', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          setUser(data.user);
+        } else if (data.expired) {
+          // Sessão expirada - limpar estado local
+          setUser(null);
+          router.push('/login');
+        }
       }
     } catch (error) {
       console.error('Erro ao verificar sessão:', error);
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -53,36 +66,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // TODO: Implementar login real com Supabase
-      // const { data, error } = await supabase.auth.signInWithPassword({
-      //   email,
-      //   password,
-      // })
-      
-      // Simulação de login (REMOVER quando conectar ao Supabase)
-      // Credenciais mockadas para teste:
-      // - Email: admin@test.com / Senha: admin123
-      // - Email: agente@test.com / Senha: agente123
-      // - Qualquer outro email/senha também funciona (modo de desenvolvimento)
-      
-      const mockCredentials = [
-        { email: 'admin@test.com', password: 'admin123', name: 'Administrador', role: 'admin' as const },
-        { email: 'agente@test.com', password: 'agente123', name: 'Agente de Vendas', role: 'agent' as const },
-      ];
-      
-      const credential = mockCredentials.find(c => c.email === email && c.password === password);
-      
-      // Se não encontrar credenciais específicas, permite login com qualquer email/senha (modo dev)
-      const mockUser: User = {
-        id: credential ? '1' : Date.now().toString(),
-        name: credential ? credential.name : 'Usuário Teste',
-        email: email,
-        role: credential ? credential.role : 'admin',
-        accountId: 'account-1',
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      // Chamar API local (porta 3000) para login
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao fazer login');
+      }
+
+      // Cookie já foi definido pelo servidor (httpOnly)
+      // Apenas atualizar estado local
+      setUser(data.user);
       
       router.push('/dashboard');
     } catch (error) {
@@ -97,22 +99,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // TODO: Implementar cadastro real com Supabase
-      // 1. Criar conta no Supabase Auth
-      // 2. Criar registro na tabela 'accounts'
-      // 3. Criar primeiro usuário admin na tabela 'users'
-      
-      // Simulação de cadastro (REMOVER quando conectar ao Supabase)
-      const mockUser: User = {
-        id: '1',
-        name: name,
-        email: email,
-        role: 'admin',
-        accountId: 'new-account-1',
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      // Chamar API local (porta 3000) para cadastro
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name, email, password, companyName }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao criar conta');
+      }
+
+      // Cookie já foi definido pelo servidor (httpOnly)
+      // Apenas atualizar estado local
+      setUser(data.user);
       
       router.push('/dashboard');
     } catch (error) {
@@ -125,15 +130,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      // TODO: Implementar logout real com Supabase
-      // await supabase.auth.signOut()
+      // Chamar API local (porta 3000) para logout
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
       
       setUser(null);
-      localStorage.removeItem('user');
       router.push('/login');
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-      throw error;
+      // Não lançar erro, apenas fazer logout local
     }
   };
 

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getAuthenticatedUser } from '@/lib/utils/auth';
+import { addSecurityHeaders } from '@/lib/utils/security';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Rotas públicas (não precisam de autenticação)
@@ -9,18 +11,24 @@ export function middleware(request: NextRequest) {
   
   // Se for rota pública, permitir acesso
   if (publicRoutes.includes(pathname) || pathname.startsWith('/api/')) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    return addSecurityHeaders(response);
   }
 
-  // Verificar se há token de autenticação no cookie ou header
-  // Por enquanto, vamos deixar passar (autenticação mockada funciona no client-side)
-  // Quando implementar Supabase, verificar aqui:
-  // const token = request.cookies.get('sb-access-token');
-  // if (!token) {
-  //   return NextResponse.redirect(new URL('/login', request.url));
-  // }
+  // Verificar autenticação e expiração da sessão
+  const user = await getAuthenticatedUser(request);
+  
+  if (!user) {
+    // Sessão expirada ou não autenticado - redirecionar para login
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    const response = NextResponse.redirect(loginUrl);
+    return addSecurityHeaders(response);
+  }
 
-  return NextResponse.next();
+  // Usuário autenticado - permitir acesso
+  const response = NextResponse.next();
+  return addSecurityHeaders(response);
 }
 
 export const config = {
