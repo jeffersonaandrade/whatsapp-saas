@@ -109,74 +109,104 @@ export const motorClientAPI = {
   /**
    * Conectar instância WhatsApp
    */
-  async connectInstance(data?: { instanceName?: string }): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
-    return proxyRequest('POST', '/api/instance/connect', data);
+  async connectInstance(
+    data?: { instanceName?: string },
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+    return proxyRequest('POST', '/api/instance/connect', data, headers);
   },
 
   /**
    * Verificar status da instância
    */
-  async getInstanceStatus(instanceName?: string): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+  async getInstanceStatus(
+    instanceName?: string,
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
     const endpoint = instanceName 
       ? `/api/instance/status?instanceName=${encodeURIComponent(instanceName)}`
       : '/api/instance/status';
-    return proxyRequest('GET', endpoint);
+    return proxyRequest('GET', endpoint, undefined, headers);
   },
 
   /**
    * Desconectar instância WhatsApp
    */
-  async disconnectInstance(data?: { instanceName?: string }): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
-    return proxyRequest('POST', '/api/instance/disconnect', data);
+  async disconnectInstance(
+    data?: { instanceName?: string },
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+    return proxyRequest('POST', '/api/instance/disconnect', data, headers);
   },
 
   /**
    * Enviar mensagem de texto
    */
-  async sendMessage(instanceName: string, payload: { number: string; text: string }): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+  async sendMessage(
+    instanceName: string,
+    payload: { number: string; text: string },
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
     return proxyRequest('POST', `/api/messages/send`, {
       instanceName,
       ...payload,
-    });
+    }, headers);
   },
 
   /**
    * Enviar mídia
    */
-  async sendMedia(instanceName: string, payload: { number: string; mediaUrl: string; caption?: string }): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+  async sendMedia(
+    instanceName: string,
+    payload: { number: string; mediaUrl: string; caption?: string },
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
     return proxyRequest('POST', `/api/messages/send-media`, {
       instanceName,
       ...payload,
-    });
+    }, headers);
   },
 
   /**
    * Enviar mensagem para grupo
    */
-  async sendGroupMessage(instanceName: string, payload: { groupId: string; text: string }): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+  async sendGroupMessage(
+    instanceName: string,
+    payload: { groupId: string; text: string },
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
     return proxyRequest('POST', `/api/messages/send-group`, {
       instanceName,
       ...payload,
-    });
+    }, headers);
   },
 
   /**
    * Enviar mídia para grupo
    */
-  async sendGroupMedia(instanceName: string, groupId: string, mediaUrl: string, message: string): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+  async sendGroupMedia(
+    instanceName: string,
+    groupId: string,
+    mediaUrl: string,
+    message: string,
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
     return proxyRequest('POST', `/api/messages/send-group-media`, {
       instanceName,
       groupId,
       mediaUrl,
       message,
-    });
+    }, headers);
   },
 
   /**
    * Listar grupos
    */
-  async fetchGroups(instanceName: string): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
-    return proxyRequest('GET', `/api/groups?instanceName=${encodeURIComponent(instanceName)}`);
+  async fetchGroups(
+    instanceName: string,
+    headers?: Record<string, string>
+  ): Promise<{ success: boolean; data?: any; error?: string; statusCode?: number }> {
+    return proxyRequest('GET', `/api/groups?instanceName=${encodeURIComponent(instanceName)}`, undefined, headers);
   },
 };
 

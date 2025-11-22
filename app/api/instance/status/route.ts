@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/lib/utils/auth';
 import { logger, getRequestContext } from '@/lib/utils/logger';
 import { isValidInstanceName } from '@/lib/utils/validation';
 import { addSecurityHeaders } from '@/lib/utils/security';
+import { extractRequestHeaders } from '@/lib/utils/request-headers';
 
 /**
  * API Route para verificar status da conexão
@@ -46,8 +47,11 @@ export async function GET(request: NextRequest) {
       accountId: user.accountId,
     }, requestContextWithUser);
 
-    // Fazer proxy para o Motor
-    const result = await motorClientAPI.getInstanceStatus(instanceName);
+    // Extrair headers (cookies, authorization) para repassar ao Motor
+    const requestHeaders = extractRequestHeaders(request);
+
+    // Fazer proxy para o Motor (repassando cookies/headers)
+    const result = await motorClientAPI.getInstanceStatus(instanceName, requestHeaders);
 
     if (!result.success) {
       logger.error('[Instance Status] Erro no Motor', result.error, {

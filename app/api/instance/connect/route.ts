@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/lib/utils/auth';
 import { logger, getRequestContext } from '@/lib/utils/logger';
 import { validatePayloadSize } from '@/lib/utils/validation';
 import { validateRequestSize, addSecurityHeaders } from '@/lib/utils/security';
+import { extractRequestHeaders } from '@/lib/utils/request-headers';
 
 /**
  * API Route para conectar instância e obter QR Code
@@ -61,8 +62,11 @@ export async function POST(request: NextRequest) {
       instanceName,
     }, requestContextWithUser);
 
-    // Fazer proxy para o Motor
-    const result = await motorClientAPI.connectInstance({ instanceName });
+    // Extrair headers (cookies, authorization) para repassar ao Motor
+    const requestHeaders = extractRequestHeaders(request);
+
+    // Fazer proxy para o Motor (repassando cookies/headers)
+    const result = await motorClientAPI.connectInstance({ instanceName }, requestHeaders);
 
     if (!result.success) {
       logger.error('[Instance Connect] Erro no Motor', result.error, {

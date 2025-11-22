@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { motorClientAPI } from '@/lib/motor-client';
 import { logger, getRequestContext } from '@/lib/utils/logger';
 import { addSecurityHeaders } from '@/lib/utils/security';
+import { extractRequestHeaders } from '@/lib/utils/request-headers';
 
 type CreateCampaignBody = {
   name: string;
@@ -103,11 +104,14 @@ export async function POST(request: NextRequest) {
         instanceName: usedInstanceName,
       }, requestContext);
 
+      // Extrair headers (cookies, authorization) para repassar ao Motor
+      const requestHeaders = extractRequestHeaders(request);
+
       for (const groupId of groups) {
         try {
           if (mediaUrl && mediaType) {
-            // Enviar mídia via Motor
-            const result = await motorClientAPI.sendGroupMedia(usedInstanceName, groupId, mediaUrl, message);
+            // Enviar mídia via Motor (repassando cookies/headers)
+            const result = await motorClientAPI.sendGroupMedia(usedInstanceName, groupId, mediaUrl, message, requestHeaders);
             if (!result.success) {
               logger.error('[Campaigns] Erro ao enviar mídia via Motor', result.error, {
                 groupId,
@@ -115,11 +119,11 @@ export async function POST(request: NextRequest) {
               }, requestContext);
             }
           } else {
-            // Enviar mensagem de texto via Motor
+            // Enviar mensagem de texto via Motor (repassando cookies/headers)
             const result = await motorClientAPI.sendGroupMessage(usedInstanceName, {
               groupId,
               text: message,
-            });
+            }, requestHeaders);
             if (!result.success) {
               logger.error('[Campaigns] Erro ao enviar mensagem via Motor', result.error, {
                 groupId,

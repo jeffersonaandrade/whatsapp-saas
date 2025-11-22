@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/lib/utils/auth';
 import { logger, getRequestContext } from '@/lib/utils/logger';
 import { isValidInstanceName, validatePayloadSize } from '@/lib/utils/validation';
 import { validateRequestSize, addSecurityHeaders } from '@/lib/utils/security';
+import { extractRequestHeaders } from '@/lib/utils/request-headers';
 
 /**
  * API Route para desconectar instância
@@ -72,8 +73,11 @@ export async function POST(request: NextRequest) {
       accountId: user.accountId,
     }, requestContextWithUser);
 
-    // Fazer proxy para o Motor
-    const result = await motorClientAPI.disconnectInstance({ instanceName });
+    // Extrair headers (cookies, authorization) para repassar ao Motor
+    const requestHeaders = extractRequestHeaders(request);
+
+    // Fazer proxy para o Motor (repassando cookies/headers)
+    const result = await motorClientAPI.disconnectInstance({ instanceName }, requestHeaders);
 
     if (!result.success) {
       logger.error('[Instance Disconnect] Erro no Motor', result.error, {
