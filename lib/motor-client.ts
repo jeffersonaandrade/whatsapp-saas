@@ -12,7 +12,10 @@ import axios, { AxiosError } from 'axios';
 import { logger, getRequestContext } from '@/lib/utils/logger';
 
 // URL do Motor (Serviço Externo)
-const MOTOR_API_URL = process.env.NEXT_PUBLIC_MOTOR_API_URL || 'https://whatsapp-evolution-api-fa3y.onrender.com';
+// Aceita ambas as variáveis para compatibilidade durante migração
+const MOTOR_API_URL = process.env.NEXT_PUBLIC_MOTOR_API_URL 
+  || process.env.NEXT_PUBLIC_EVOLUTION_API_URL // Fallback para compatibilidade
+  || 'https://whatsapp-evolution-api-fa3y.onrender.com';
 
 // Criar instância do axios configurada para o Motor
 const motorClient = axios.create({

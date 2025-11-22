@@ -1,7 +1,10 @@
 /**
- * Serviço para comunicação com o Motor (Backend na porta 3001)
+ * Serviço para comunicação com as rotas de API do CÉREBRO
  * 
- * Este serviço é usado APENAS para chamadas relacionadas à Evolution API:
+ * IMPORTANTE: Este serviço chama as rotas do próprio CÉREBRO (Netlify),
+ * que fazem proxy para o Motor. NÃO chama o Motor diretamente.
+ * 
+ * Este serviço é usado APENAS para chamadas relacionadas à WhatsApp:
  * - Conectar instância WhatsApp
  * - Verificar status da instância
  * - Desconectar instância
@@ -11,12 +14,10 @@
 
 import axios from 'axios';
 
-// URL do Motor (Backend na porta 3001)
-const MOTOR_API_URL = process.env.NEXT_PUBLIC_MOTOR_API_URL || 'http://localhost:3001';
-
-// Criar instância do axios configurada para o Motor
-const motorApi = axios.create({
-  baseURL: MOTOR_API_URL,
+// Usar rotas do próprio CÉREBRO (relativas, sem baseURL)
+// As rotas do CÉREBRO fazem proxy para o Motor
+const api = axios.create({
+  baseURL: '', // Vazio = usa a mesma origem (Netlify)
   withCredentials: true, // OBRIGATÓRIO: envia cookies (auth_token, user, etc.)
   headers: {
     'Content-Type': 'application/json',
@@ -25,18 +26,19 @@ const motorApi = axios.create({
 
 // Log de configuração (apenas no cliente)
 if (typeof window !== 'undefined') {
-  console.log('[Motor Service] Configurado:', {
-    baseURL: MOTOR_API_URL,
+  console.log('[Motor Service] Configurado para usar rotas do CÉREBRO:', {
+    baseURL: 'relativo (mesma origem)',
     withCredentials: true,
   });
 }
 
 /**
  * Conectar instância WhatsApp e obter QR Code
+ * Chama a rota do CÉREBRO que faz proxy para o Motor
  */
 export async function connectInstance(data?: { instanceName?: string }) {
   try {
-    const response = await motorApi.post('/api/instance/connect', data || {});
+    const response = await api.post('/api/instance/connect', data || {});
     return {
       success: true,
       data: response.data,
@@ -53,13 +55,14 @@ export async function connectInstance(data?: { instanceName?: string }) {
 
 /**
  * Verificar status da instância WhatsApp
+ * Chama a rota do CÉREBRO que faz proxy para o Motor
  */
 export async function getInstanceStatus(instanceName?: string) {
   try {
     const url = instanceName 
-      ? `/api/instance/status?instanceName=${instanceName}`
+      ? `/api/instance/status?instanceName=${encodeURIComponent(instanceName)}`
       : '/api/instance/status';
-    const response = await motorApi.get(url);
+    const response = await api.get(url);
     return {
       success: true,
       data: response.data,
@@ -76,10 +79,11 @@ export async function getInstanceStatus(instanceName?: string) {
 
 /**
  * Desconectar instância WhatsApp
+ * Chama a rota do CÉREBRO que faz proxy para o Motor
  */
 export async function disconnectInstance(data?: { instanceName?: string }) {
   try {
-    const response = await motorApi.post('/api/instance/disconnect', data || {});
+    const response = await api.post('/api/instance/disconnect', data || {});
     return {
       success: true,
       data: response.data,
@@ -93,4 +97,3 @@ export async function disconnectInstance(data?: { instanceName?: string }) {
     };
   }
 }
-
